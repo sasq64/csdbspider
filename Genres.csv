@@ -1,0 +1,176 @@
+GE_Id,Genre,PG_Id
+1,"[uncategorized]",13
+2,"Miscellaneous",15
+3,"Collect'em Up",15
+4,"Beat'em Up",15
+5,"Miscellaneous",21
+6,"H-Scrolling",21
+7,"V-Scrolling",21
+8,"Multi-Scrolling",21
+9,"Space Invaders",21
+10,"3D",21
+11,"Platformer (Single Screen)",15
+12,"Platformer (Multi Screen)",15
+13,"Platformer (Scrolling Screen)",15
+16,"Gauntlet",21
+18,"War",24
+19,"Miscellaneous",24
+20,"Tetris",15
+22,"Miscellaneous",20
+23,"Overhead",20
+25,"[uncategorized]",20
+26,"Athletics",23
+27,"Basketball",23
+28,"Bowling",23
+29,"Cricket",23
+30,"Cycling",23
+31,"Darts",23
+32,"Football/Soccer (Arcade)",23
+33,"Fighting",23
+34,"Golf",23
+35,"Miscellaneous",23
+36,"Skiing",23
+37,"Snooker/Pool",23
+38,"Tennis",23
+39,"Watersports",23
+40,"[uncategorized]",25
+41,"Miscellaneous",18
+42,"Puzzle",16
+43,"Slot Machine",18
+44,"Breakout/Pong",15
+45,"Pinball",15
+46,"Quiz",17
+48,"Weird!",19
+49,"Miscellaneous",17
+50,"Demo",19
+51,"Baseball",23
+52,"American Football",23
+54,"Boulder Dash",15
+55,"Pac Man",15
+56,"Riding",23
+57,"Logical Game",16
+58,"Tron",15
+59,"Labyrinth/Maze",15
+60,"Centipede",21
+61,"Minesweeper",16
+62,"Duel",21
+63,"Worm/Snake",15
+64,"Chess",26
+65,"Ice Hockey",23
+66,"Boxing",23
+67,"Table Tennis",23
+68,"Volleyball",23
+69,"Wrestling",23
+70,"Formula One",20
+71,"Motorcycle",20
+73,"Rugby",23
+74,"Multi-Event",23
+75,"Skating",23
+76,"Squash",23
+77,"Shooting",23
+78,"Dice",18
+79,"Backgammon",26
+80,"Monopoly",26
+81,"Draughts/Checkers",26
+82,"Kalaha",26
+83,"Othello",26
+84,"Tic Tac Toe",16
+85,"4 Wins",16
+86,"Solitaire",16
+87,"Graphic(Hi-Res)/Text",14
+88,"Text only",14
+89,"RPG 2D",14
+90,"RPG 3D",14
+91,"Arcade 2D",14
+92,"Arcade 3D",14
+93,"Selectable Answers",14
+94,"Joystick only",14
+95,"Move and Type",14
+96,"Miscellaneous",14
+97,"Click and Type",14
+98,"Comic",14
+99,"[uncategorized]",14
+100,"RPG Text",14
+101,"Platformer",21
+102,"Flight (Military)",22
+103,"Flight (Civil)",22
+104,"Space",22
+105,"Marine",22
+106,"Uridium",21
+107,"Miscellaneous",22
+108,"D-Scrolling",21
+109,"Cars",20
+110,"Company",24
+111,"Politics",24
+112,"Miscellaneous",16
+113,"Scramble",21
+114,"Typing",17
+115,"Maths",17
+117,"Geography",17
+119,"Spelling",17
+120,"Memory",16
+133,"Frogger",15
+134,"Mastermind",16
+135,"Tank",22
+136,"Miscellaneous",26
+137,"Trading",24
+138,"Wallstreet",24
+139,"[uncategorized]",15
+140,"[uncategorized]",16
+141,"[uncategorized]",17
+142,"[uncategorized]",18
+143,"[uncategorized]",19
+144,"[uncategorized]",21
+145,"[uncategorized]",22
+146,"[uncategorized]",23
+147,"[uncategorized]",24
+148,"Racing",18
+149,"Train",22
+150,"Catch it",15
+151,"Avoid it",15
+152,"Defender",21
+153,"SEUCK",21
+155,"GAC",14
+156,"Hangman",16
+157,"AdventureWriter/Quill",14
+158,"Logical Game",15
+159,"Life",24
+160,"Stay on Track",20
+161,"Platformer (3D)",15
+162,"Detective",24
+163,"Graphic(Charset)/Text",14
+164,"Bomberman",15
+166,"Search & Rescue",15
+168,"Construction Kit",15
+169,"Challenge",15
+170,"Pengo",15
+171,"Multigenre",15
+172,"Crosshair",21
+173,"Football/Soccer (Manager)",23
+176,"Stuff-Sorting",15
+177,"Casino",18
+178,"Construction Kit",14
+179,"Quiz",18
+180,"Vocabulary/Language",17
+184,"Bridge",25
+185,"Poker",25
+186,"Solitaire",25
+187,"Blackjack",25
+188,"Baccarat",25
+189,"Skat",25
+190,"Miscellaneous",25
+192,"[uncategorized]",26
+193,"Tile Removal",16
+194,"Crossword",16
+195,"Scrabble",26
+196,"Undefinable",19
+197,"Joust",15
+198,"Lander",15
+199,"SEUCK",15
+200,"Arcade",16
+201,"Bomber",21
+202,"Yahtzee",18
+203,"Towers of Hanoi",16
+204,"Battleships",18
+205,"Amidar",15
+206,"Collect'em Up (Racing)",15

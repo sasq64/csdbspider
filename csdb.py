@@ -53,7 +53,7 @@ class Release :
 		return "[" + str(self.id) + "] " + name + " (" + self.type + ")"
 		
 	def update(self):
-		
+
 		m = re.compile('.*(\d\d\d\d)').match(self.date)
 		if m :
 			self.year = m.group(1)
@@ -79,7 +79,7 @@ class Release :
 
 		anyword = re.compile('\w+')
 		name = '?'
-		gid = -1
+		#gid = -1
 		group = '?'
 		type = '?'
 		rdate = '?'
@@ -87,9 +87,10 @@ class Release :
 
 		try :
 			name = start.find('font').string
-			ag = start.find(text=re.compile('Release.*by')).findNext('a')
-			gid = int(re.compile('id=(\w+)').findall(ag.attrs[0][1])[0])
-			group = start.find(text=re.compile('Release.*by')).findNext(text=anyword)
+			release_by = start.find(text=re.compile('Release.*by'))
+			ag = release_by.findNext('a')
+			#gid = int(re.compile('id=(\w+)').findall(ag.attrs[0][1])[0])
+			group = release_by.findNext(text=anyword)
 		except :
 			pass
 		try :					
@@ -102,6 +103,7 @@ class Release :
 		except :
 			pass
 		#print "'%s' by '%s' (%d), Release date '%s'" % (name, group, gid, rdate)
+
 
 		if name != '?' :
 			self.name = fixhtml(name)
@@ -134,8 +136,8 @@ class Release :
 		fname = fixname(os.path.basename(u.geturl()))
 
 		filter = None
-		if to_prg and self.name and self.name != '?' :
-			filter = fixname(self.name).lower()
+		#if to_prg and self.name and self.name != '?' :
+		#	filter = fixname(self.name).lower()
 
 		try :
 			path = tempfile.mkdtemp()
@@ -348,7 +350,7 @@ def main(argv) :
 	#line = raw_input('>')
 	#line = argv
 	
-	p = optparse.OptionParser(usage ="usage: %prog [options] <command> [args...]\n\nCommands:\n find <groupname>  = Search for a group by name\n list			  = List releases (with filtering) for a groupid\n dl				= Download releases (with filtering) for a groupid")
+	p = optparse.OptionParser(usage ="usage: %prog [options] <command> [args...]\n\nCommands:\n findgrp <groupname> = Search for a group by name\n list = List releases (with filtering) for a groupid\n findrel = Find releases")
 	p.add_option("-D", "--download",
 				  action="store_true", dest="download", default=False,
 				  help="Download matching releases")
@@ -414,7 +416,7 @@ def main(argv) :
 	#l = argv #line.split()
 	l = arguments;
 	if len(l) >= 1 :
-		if l[0] == 'find' :
+		if l[0] == 'findgrp' :
 			groups = csdb.findGroups(l[1])
 			if groups :
 				for g in groups :
@@ -433,7 +435,7 @@ def main(argv) :
 						print "\n"
 						rels.append(group.releases.sort(lambda x, y : x.year > y.year))
 
-		elif l[0] == 'search' :
+		elif l[0] == 'findrel' :
 			print "Searching for %s" % l[1]
 			rels = CSDBSpider.findReleases(l[1])
 

@@ -110,7 +110,9 @@ def unpack(archive, targetdir, to_d64 = False, to_prg = False, filter = None):
 		d64 = None
 		for r in res :
 			if r[-4:].upper() == '.D64' :
-				subprocess.call(['cbmconvert', '-N', '-d', r], cwd=targetdir)
+				rc = subprocess.call(['cbmconvert', '-N', '-d', r], cwd=targetdir)
+				if rc != 0 :
+					print "### CBMCONVERT RETURNED %d" % (rc,)
 				foundprog = False
 				for r2 in os.listdir(targetdir) :
 					if r2[-4:].upper() == '.DEL' or r2[-4:].upper() == '.USR':
@@ -141,6 +143,7 @@ def unpack(archive, targetdir, to_d64 = False, to_prg = False, filter = None):
 		for r in res :
 			rl = r.lower()
 			rsplit = os.path.splitext(rl)
+			print "Considering %s with ext %s" % (rl, rsplit[1])
 			if rsplit[1] == '.prg' :
 				hits = 0
 				for f in fsplit :
@@ -158,8 +161,13 @@ def unpack(archive, targetdir, to_d64 = False, to_prg = False, filter = None):
 	res = os.listdir(targetdir)
 	for r in res :
 		dname = os.path.splitext(r)
-		if dname[1].upper() == '.SEQ' :
+		ext = dname[1].upper()
+		if ext == '.PRG' or ext == '.D64' or ext == '.T64' or ext == '.DIZ' or ext == '.TXT' or ext == '.REU' :
+			pass
+		elif ext == '.SEQ' :
 			os.rename(targetdir + '/' + r, targetdir + '/' + dname[0] + '.prg')
+		else :
+			os.remove(targetdir + '/' + r)
 
 	fat32names(targetdir)
 

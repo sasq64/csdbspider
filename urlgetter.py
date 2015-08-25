@@ -36,7 +36,7 @@ class URLGetter :
 		try :
 			f = open('urlcache/' + self.uname, 'r')
 			self.realu = f.readline().strip()
-			self.contents = f.read(8*1024*1024)
+			self.contents = f.read(32*1024*1024)
 			f.close()
 			print "Using cached result"
 			return

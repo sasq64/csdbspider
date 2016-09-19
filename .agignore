@@ -1,0 +1,9 @@
+urlcache/
+OUT/
+*~
+.*
+*.exe
+*.pyc
+*.db
+*.sublime-*
+.tags*

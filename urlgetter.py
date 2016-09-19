@@ -33,6 +33,11 @@ class URLGetter :
 		self.realu = url
 		
 		self.uname = urllib.quote(url, '')
+
+		x = urlparse.urlsplit(url)
+		url = urlparse.urlunsplit((x[0], x[1], urllib.quote(x[2]), x[3], x[4]))
+		self.url = url
+		
 		try :
 			f = open('urlcache/' + self.uname, 'r')
 			self.realu = f.readline().strip()
@@ -44,9 +49,6 @@ class URLGetter :
 			pass
 		
 		socket.setdefaulttimeout(5)
-
-		x = urlparse.urlsplit(url)
-		url = urlparse.urlunsplit((x[0], x[1], urllib.quote(x[2]), x[3], x[4]))
 
 		try :
 			self.url = urllib.urlopen(url)

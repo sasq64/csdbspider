@@ -4,6 +4,7 @@ import sys
 import string
 import re
 import os
+import glob
 import subprocess
 import shutil
 import tempfile
@@ -82,8 +83,10 @@ def unpack(archive, targetdir, to_d64 = False, to_prg = False, filter = None):
 	for r in res :
 		if r[:2] == '1!' :
 			subprocess.call(['zip2disk', r[2:]], cwd=targetdir)
-			for i in xrange(6) :
-				os.remove('%s/%d!%s' % (targetdir, i+1, r[2:]))
+			for f in glob.glob("%s/?!%s" % (targetdir, r[2:])) :
+				os.remove(f)
+			#for i in xrange(6) :
+			#	os.remove('%s/%d!%s' % (targetdir, i+1, r[2:]))
 		elif r[-3:].upper() == 'T64' :
 			subprocess.call(['cbmconvert', '-t', r], cwd=targetdir)
 			os.remove(targetdir + '/' + r)
@@ -162,12 +165,22 @@ def unpack(archive, targetdir, to_d64 = False, to_prg = False, filter = None):
 	for r in res :
 		dname = os.path.splitext(r)
 		ext = dname[1].upper()
-		if ext == '.PRG' or ext == '.D64' or ext == '.T64' or ext == '.DIZ' or ext == '.TXT' or ext == '.REU' :
+		if ext == '.PRG' or ext == '.D64' or ext == '.T64' or ext == '.DIZ' or ext == '.TXT' or ext == '.REU' or ext == ".G64" or ext == ".CRT" or ext == ".TAP" :
 			pass
 		elif ext == '.SEQ' :
 			os.rename(targetdir + '/' + r, targetdir + '/' + dname[0] + '.prg')
 		else :
-			os.remove(targetdir + '/' + r)
+			sz = os.path.getsize(targetdir + '/' + r)
+			if sz == 174848 :
+				os.rename(targetdir + '/' + r, targetdir + '/' + dname[0] + '.d64')
+			else :
+				print "Checking if %s is a PRG" % (r,)
+				f = open(targetdir + '/' + r)
+				x = f.read(2)
+				if x == '\x01\x08' :
+					os.rename(targetdir + '/' + r, targetdir + '/' + r + '.prg')
+				else :
+					os.remove(targetdir + '/' + r)
 
 	fat32names(targetdir)
 

@@ -1,709 +1,186 @@
-#!/usr/bin/python
-
-import sys
-import struct
-import string
-import socket
-import re
+#!/usr/bin/env python3
+import argparse
 import os
-import subprocess
-import shutil
-import tempfile
-import socket
-import optparse
-import exceptions
-import copy
-from select import *
-from threading import *
-from utils import *
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, Literal
 
-import htmllib, formatter, urllib, urlparse, HTMLParser, htmlentitydefs
-from BeautifulSoup import BeautifulSoup
+from bs4 import BeautifulSoup
 
-from tools64 import unpack
-from urlgetter import URLGetter
-
-baseUrl = 'http://csdb.dk'
-no_clobber = False
-oneFilers = ['C64 256b Intro', 'C64 Music', 'C64 Graphics', 'C64 4K Intro', 'C64 Intro']
-
-packArcs = []
-possiblePack = []
+from tools64 import Release, unpack
+from utils import fixname
 
 
-def is_collection(x):
-    return os.path.basename(x) in packArcs or 'releases' in x.lower() or 'graphics' in x.lower()
+def download(url: str) -> Path | None:
+    t = urllib.parse.unquote_plus(url)
+    name = urllib.parse.quote_plus(t)
+    file_name = Path(f"releases/{name}")
+    if not file_name.exists():
+        try:
+            data = urllib.request.urlopen(url.replace(' ', '%20')).read()
+            file_name.write_bytes(data)
+        except urllib.error.HTTPError: 
+            return None
+        except urllib.error.URLError:
+            return None
+    return file_name
+
+type What = Literal["groups", "demos", "onefile"]
+
+def get_top_list(what: What) -> str :
+    if what == "groups":
+        url = r"https://csdb.dk/toplist.php?type=group&subtype=(1)"
+    elif what == "demos":
+        url = r"https://csdb.dk/toplist.php?type=group&subtype=(1)"
+    elif what == "onefile":
+        url = r"https://csdb.dk/toplist.php?type=group&subtype=(1)"
+    else:
+        raise NameError
+    data : bytes = urllib.request.urlopen(url).read()
+    return data.decode()
 
 
-def prefer_download(x):
-    p = 0
-    if is_collection(x):
-        p = 1
-    elif 'work' in x.lower():
-        p = 2
-    return p
+def get_releases(what: What) -> list[Release]:
+    doc = get_top_list(what)
+    return get_releases_from_csdb_toplist(doc)
 
+def get_releases_from_csdb_toplist(doc: str | BeautifulSoup):
+    if isinstance(doc, BeautifulSoup):
+        soup = doc
+    else:
+        soup = BeautifulSoup(doc, 'html.parser')
 
-def longest_common_substring(s1, s2):
-    m = [[0] * (1 + len(s2)) for i in xrange(1 + len(s1))]
-    longest, x_longest = 0, 0
-    for x in xrange(1, 1 + len(s1)):
-        for y in xrange(1, 1 + len(s2)):
-            if s1[x - 1] == s2[y - 1]:
-                m[x][y] = m[x - 1][y - 1] + 1
-                if m[x][y] > longest:
-                    longest = m[x][y]
-                    x_longest = x
-            else:
-                m[x][y] = 0
-    return s1[x_longest - longest: x_longest]
+    # Find starting table
+    b = soup.find("b", string="Place")
+    table = b.find_parent("table") if b else None
+    if table is None:
+        sys.exit("Could not find release table")
 
-
-class Release:
-    typeLetters = {'One-File': 'o', 'Game': 'e', 'Graphics Coll': 'G', 'Graphic': 'g', 'Demo': 'd', 'Dentro': 'd',
-                   'Intro': 'i', 'intro': 'i', 'Crack': 'c', 'Music Coll': 'M', 'Music': 'm', 'Diskmag': 's',
-                   'Invit': 'v', 'Tool': 't', 'Misc': 'x'}
-
-    def __init__(self, id, name='?', group='?', type='?', date='?', dls=[]):
-        self.id = int(id)
-        self.name = name
-        self.group = group
-        self.date = date
-        self.type = type
-        self.artist = '?'
-        self.vote = '?'
-        self.downloads = dls
-        self.rating = ''
-        self.creator = group
-        self.loaded = False
-        self.place = self.place2 = '?'
-        self.compo = '?'
-        self.party = '?'
-        self.update()
-
-    def __repr__(self):
-        name = self.name.encode('ascii', 'ignore')
-        return "[" + str(self.id) + "] " + name + " (" + self.type + ")"
-
-    def update(self):
-
-        m = re.compile('.*(\d\d\d\d)').match(self.date)
-        if m:
-            self.year = m.group(1)
+    releases : list[Release] = []
+    ok = False
+    place = 0
+    votes = re.compile("votes")
+    for tr in table.find_all("tr"):
+        if ok:
+            d = tr.find_all("td")
+            s = d[0].text.strip()
+            if s != "":
+                place = int(s)
+            title = d[1].text
+            href = d[1].find("a").attrs["href"]
+            id = int(href.split("=")[1].strip())
+            rating = float(d[2].text.strip())
+            releases.append(Release(id, place, rating, title))
+            print(f"{place} {title} {id} {rating}")
         else:
-            self.year = '????'
+            ok = tr.find("b", string=votes)
+    return releases
 
-        self.tletter = '?'
-        for t in Release.typeLetters:
-            if self.type.find(t) >= 0:
-                self.tletter = Release.typeLetters[t]
-                break
+def populate_release(release: Release) -> bool:
+    """Use CSDb webservice to populate Release struct"""
 
-        self.dict = {}
-        for d in self.__dict__:
-            self.dict[d] = fixname(unicode(self.__dict__[d]), False)
-
-    def load(self):
-        doc = URLGetter(baseUrl + '/release/?id=%s' % (self.id)).getsoup()
-        if not doc:
-            return
-        start = doc.find(text=re.compile('MAIN CONTENT')).parent
-
-        anyword = re.compile('\w+')
-        name = '?'
-        # gid = -1
-        group = '?'
-        type = '?'
-        rdate = '?'
-        artist = None
-        downloads = None
-        vote = None
-        score = None
-        compo = '?'
-        party = '?'
-        place2 = place = '?'
-
-        print "Loading release"
-
+    os.makedirs("releases", exist_ok=True)
+    p = Path(f"releases/{release.id}.xml")
+    if p.exists():
+        text : str = p.read_text()
+    else:
+        url = rf"https://csdb.dk/webservice/?type=release&id={release.id}&depth=2"
         try:
-            name = start.find('font').string
-            release_by = start.find(text=re.compile('Release.*by'))
-            # ag = release_by.findNext('a')
-            # gid = int(re.compile('id=(\w+)').findall(ag.attrs[0][1])[0])
-            group = release_by.findNext(text=anyword)
-        except:
-            pass
+            data : bytes = urllib.request.urlopen(url).read()
+        except ValueError:
+            sys.exit(f"Illegal URL: {url}")
+        except (urllib.error.HTTPError, urllib.error.URLError):
+            sys.exit(f"Network error for {url}")
+        text : str= data.decode("utf-8")
+        p.write_text(text)
+    tree = ET.fromstring(text)
 
-        try:
-            vote = start.find(text=re.compile('.*votes.*'))
-            if vote:
-                # &nbsp; 7.7/10 (62 votes) &nbsp;
-                m = re.match('[^\d]*([\d\.]+)', vote)
-                score = m.group(1)
-                if len(score) == 1:
-                    score = score + '.0'
-        except:
-            pass
+    name = tree.find("./Release/Name")
+    if name is None:
+        return False
+    release.title = name.text if name.text is not None else "?"
+    dls = tree.findall(".//DownloadLink/Link")
+    print(dls)
+    release.downloads = list([dl.text for dl in dls if dl.text is not None])
+    groups = tree.findall(".//ReleasedBy/Group/Name")
+    if len(groups) == 0:
+        groups = tree.findall(".//ReleasedBy/Handle/Handle")
 
-        try:
-            credits = start.find(text=re.compile('Credits :'))
-            gfx = credits.findNext(text=re.compile('Graphics'))
-            artist = gfx.findNext('a').string
-        except:
-            pass
+    gn = [n.text for n in groups if n.text is not None]
+    release.group = gn[0] if len(gn) > 0 else "Unknown"
+    return True
 
-        try:
-            type = start.find(text=re.compile('Type')).findNext(text=anyword)
-            rdate = start.find(text=re.compile('Release.*ate')).findNext(text=anyword)
-        except:
-            pass
-        try:
-            downloads = start.find(text=re.compile('Download')).findNext('table').findAll(text=re.compile('tp://'))
-        except:
-            pass
-        # print "'%s' by '%s' (%d), Release date '%s'" % (name, group, gid, rdate)
-        try:
-            rstart = start.find(text=re.compile('Released At'))
-            party = rstart.findNext(text=anyword)
-            compo = type
-        except:
-            pass
+def download_releases(releases: list[Release], template: str):
+    for release in releases:
+        if not populate_release(release):
+            continue
+        d : dict[str, str | int | float] = {}
+        for key,val in release.__dict__.items():
+            if isinstance(val,str):
+                d[key] = fixname(val)
+            elif isinstance(val, (int, float)):
+                d[key] = val
+        target_dir = Path(template.format(**d))
+        os.makedirs(target_dir, exist_ok=True)
+        print(target_dir)
+        for dl in release.downloads:
+            if "SourceCode" in dl:
+                continue
+            file = download(dl)
 
-        try:
-            astart = start.find(text=re.compile('Achievements'))
-            print astart
-            where = astart.findNext(text=anyword)
-            if where:
-                compo, party = where.split(' at ')
-                print party
-                place = where.next[where.next.find('#') + 1:]
-                print place
-        except:
-            pass
-
-        creator = group
-        cstart = start.find(text=re.compile('Credits'))
-        musicBy = codeBy = graphicsBy = None
-        try:
-            codeBy = cstart.findNext(text='Code').next.next.findNext(text=anyword)
-        except:
-            pass
-        try:
-            musicBy = cstart.findNext(text='Music').next.next.findNext(text=anyword)
-        except:
-            pass
-        try:
-            graphicsBy = cstart.findNext(text='Graphics').next.next.findNext(text=anyword)
-        except:
-            pass
-
-        if type == 'C64 Music':
-            creator = musicBy
-        elif type == 'C64 Graphics':
-            creator = graphicsBy
-
-        print downloads
-
-        if not artist:
-            print "ARTIST < " + group
-            artist = group
-
-        if name != '?':
-            self.name = fixhtml(name)
-        if artist and artist != '?':
-            self.artist = fixhtml(artist)
-        if group != '?':
-            self.group = fixhtml(group)
-        if type != '?':
-            self.type = fixhtml(type)
-        if rdate != '?':
-            self.date = fixhtml(rdate)
-        if downloads:
-            self.downloads = downloads
-        if score:
-            self.score = score
-        if compo != '?':
-            self.compo = fixhtml(compo)
-            print self.compo
-        if party != '?':
-            self.party = fixhtml(party)
-        if place != '?':
-            self.place = int(place)
-            self.place2 = "%02d" % self.place
-        if creator:
-            self.creator = fixhtml(creator)
-        self.loaded = True
-        self.update()
-
-    def getdict(self):
-        return self.dict
-
-    def makename(self, templ):
-        st = string.Template(templ)
-        s = st.safe_substitute(self.getdict())
-        s = re.sub('{\W*\?+\W*}', '', s)
-        return s.replace('{', '').replace('}', '')
-
-    def download_from_url(self, url, targetdir, to_d64=False, to_prg=False):
-        # print "Original URL %s" % url
-        url = url.rstrip(';')
-
-        u = URLGetter(url)
-        # print "Reading from url '%s'" % u.geturl()
-        contents = u.read()
-        # print "Got %d bytes" % len(contents)
-        fname = fixname(os.path.basename(u.geturl()))
-
-        # if self.type in oneFilers :
-        #	to_prg = True
-
-        pickOne = False
-        print "ARCHIVE " + fname
-        if fname in packArcs or 'releases' in fname.lower() or 'graphics' in fname.lower():
-            pickOne = True
-            to_prg = True
-
-        # if to_prg == Auto :
-        #	if self.type in oneFilers :
-        #		to_prg = Always
-        #	else :
-        #		to_prg = Never
-
-        if u.geturl().find('intros.c64.org') >= 0:
-            fname = 'intro.prg'
-        print "FNAME: " + fname
-
-        filter = None
-        # if to_prg and self.name and self.name != '?' :
-        # filter = fixname(self.name).lower()
-
-        try:
-            path = tempfile.mkdtemp()
-            fullname = path + '/' + fname.lstrip('-')
-            f = open(fullname, 'w')
-            f.write(contents)
-            f.close()
-            print "Handling file '%s' to '%s'" % (fullname, targetdir)
-            if to_d64 and to_prg:
-                if 'oicgm'.find(self.tletter) >= 0:
-                    unpack(fullname, targetdir, False, True, filter)
-                else:
-                    unpack(fullname, targetdir, filter)
-            else:
-                unpack(fullname, targetdir, to_d64, to_prg, filter)
-        # except :
-        #	print "FAILED to unpack file"
-        finally:
-            shutil.rmtree(path)
-
-        count = 0
-        res = os.listdir(targetdir)
-
-        best = None
-        maxl = 0
-        for r in res:
-            rs = os.path.splitext(r)
-            ext = rs[1].upper()
-            base = rs[0].lower()
-
-            if ext == '.PRG' or ext == '.D64' or ext == '.TAP' or ext == ".CRT" or ext == ".G64":
-                count += 1
-            if ext == ".PRG" and pickOne:
-                base = re.sub(r'[^\w]', '', base)
-                name = re.sub(r'[^\w]', '', self.name.lower())
-                creator = re.sub(r'[^\w]', '', self.creator.lower())
-                n = longest_common_substring(name, base)
-                c = longest_common_substring(creator, base)
-                l = len(n) + len(c)
-                if l > maxl:
-                    if best:
-                        os.remove(targetdir + '/' + best)
-                    best = r
-                    maxl = l
-                else:
-                    os.remove(targetdir + '/' + r)
-        if best:
-            print "Matched %s with %s" % (self.name, best)
-
-        if count == 0:
-            print "Download did not contain any C64 files."
-            for r in res:
-                os.remove(targetdir + '/' + r)
-            raise IOError
-            return
-        elif count > 4 and not pickOne and (fname not in possiblePack):
-            print "Directory '%s' contains %d files" % (targetdir, count)
-            possiblePack.append(fname)
-
-    def download(self, to_d64=False, to_prg=False, templ='DEMOS/$group/$name {- $year} {($type)}'):
-
-        targetdir = self.makename(templ)
-        targetdir = targetdir.replace('?', '')
-
-        res = []
-        try:
-            res = os.listdir(targetdir)
-        except exceptions.OSError:
-            pass
-
-        if no_clobber and len(res) > 0:
-            print "Leaving non-enpty directory alone"
-            return
-
-        success = False
-
-        downloads = sorted(self.downloads, key=prefer_download)
-
-        while not success:
-            for url in downloads:
-                try:
-                    self.download_from_url(url, targetdir, to_d64, to_prg)
-                    success = True
+            if file is not None:
+                if target_dir.is_dir():
+                    for r in target_dir.iterdir():
+                        os.remove(r)
+                    os.rmdir(target_dir)
+                udir = Path("_unpack")
+                unpack(file, udir, d64_to_prg=True)
+                if len(list(udir.iterdir())) > 0:
+                    os.rename(udir, target_dir)
                     break
-                except Exception, e:
-                    print e
-                    print "Download failed"
-                    continue
 
-            if not self.loaded and not success:
-                self.load()
-                continue
-            else:
-                break
+class Store(argparse.Action):
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: str | Sequence[Any] | None, option_string: str | None = None):
+        if values is None:
+            return
+        print(values)
+        print(option_string)
 
 
-class Group:
-    def __init__(self, id, name, tla, rels):
-        self.id = id
-        self.name = name
-        self.tla = tla
-        self.releases = rels
+def main():
 
+    arg_parser = argparse.ArgumentParser(
+        prog="csdb_tool",
+        description="Scrape CSDb",
+    )
 
-class CSDBSpider:
-    def __init__(self):
-        pass
+    arg_parser.add_argument("-G", "--base-dir", help="Path to GB64 'Games' directory. Will never be modified")
+    arg_parser.add_argument("-T", "--target-dir", help="Path to created directory. Used when filtering and organizing")
+    arg_parser.add_argument("--action", nargs="*", help="What to do", default = [ "convert" ])
+    arg_parser.add_argument("-d", "--destination-template",
+                            help="Target template",
+                            default= "Demos/{rank:3}. {group} - {title} ({year})")
+    arg_parser.add_argument("-o", "--organize",
+                            default = True,
+                            help="Reorganize directories so each directory contains an apropriate number of files.")
+    arg_parser.add_argument("-x", "--exclude", nargs="*", action=Store,
+                            help="Add an exclusion rule")
+    arg_parser.add_argument("-i", "--include", nargs="*", action=Store,
+                            help="Add an inclusion rule")
 
-    @staticmethod
-    def getReleases(url, max=-1, full=False):
-        "Find all releases on a given URL"
-        if url[:4] != 'http':
-            url = baseUrl + '/' + url
-        rels = []
-        doc = URLGetter(url).getsoup()
+    args = arg_parser.parse_args()
+    template =args.destination_template
 
-        start = doc.find(text=re.compile('MAIN CONTENT')).parent
-        if start:
-            doc = start
+    releases = get_releases("demos")
+    for r in releases:
+        populate_release(r)
+    download_releases(releases, template)
 
-        relp = re.compile('/release/\?id=(\d+)')
-        alist = doc.findAll('a', href=relp)
-        # print alist
-        for a in alist:
-            # print a.contents
-            for at in a.attrs:
-                # print at
-                if at[0] == 'href':
-                    m = relp.match(at[1])
-                    if a.contents:
-                        r = Release(int(m.group(1)), a.contents[0])
-                    else:
-                        r = Release(int(m.group(1)))
-                    if full:
-                        r.load()
-                    rels.append(r)
-            if max > 0 and len(rels) >= max:
-                break
-        return rels
+main()
 
-    @staticmethod
-    def findGroups(name):
-        groups = []
-        print '"%s"' % (name)
-        doc = URLGetter(baseUrl + '/search/?seinsel=groups&search=%s' % (name)).getsoup()
-        # doc = BeautifulSoup(urllib.urlopen('http://noname.c64.org/csdb/search/?seinsel=groups&search=%s' % name))
-        try:
-            res = doc.ol.findAll('a')
-        except:
-            print 'Direct result, figuring out ID'
-            r = re.compile('/group/\?id=(\d+).*votes')
-            x = doc.find(href=r)
-            id = int(r.findall(x.attrs[0][1])[0])
-            return [(id, name)]
-
-        for r in res:
-            id = int(re.compile('id=(\w+)').findall(r.attrs[0][1])[0])
-            name = r.string
-            groups.append((id, name))
-        return groups
-
-    @staticmethod
-    def findReleases(name):
-        return CSDBSpider.getReleases(baseUrl + "/search/?seinsel=releases&search=" + name + "&all=1")
-
-    @staticmethod
-    def getGroup(id):
-        doc = URLGetter(baseUrl + '/group/?id=%s' % (id)).getsoup()
-        start = doc.find(text=re.compile('MAIN CONTENT')).parent
-        group = start.find('font')
-        name = fixhtml(group.string.strip())
-        t = re.compile('\((.*)\)').findall(group.next.next)
-        tla = ''
-        if t:
-            tla = t[0]
-        reltab = doc.body.find(text=re.compile('Releases')).findNext('table')
-        alist = reltab.findAll('tr')
-        releases = []
-        url = ''
-        for tr in alist:
-
-            # print tr
-
-            rname = '???????'
-            rid = -1
-            url = ''
-            event = ''
-            year = '?'
-            type = '?'
-
-            try:
-                f = tr.findAll('font')
-                year = f[1].string.strip()
-                if len(f) >= 3:
-                    type = fixhtml(f[2].string).strip()
-            except:
-                pass
-
-            t = tr.find('a', href=re.compile('/release/\?'))
-            if t:
-                rname = fixhtml(t.string).strip()
-
-                print rname
-
-                try:
-                    rid = int(re.compile('id=(\w+)').findall(t.attrs[0][1])[0])
-                except:
-                    print "Could not parse ID"
-                    pass
-
-            tds = tr.findAll('td')
-            year = tds[2].font.string
-            type = tds[3].font.string
-
-            if type.startswith('&nbsp;'):
-                type = type[6:]
-
-            print "       " + type
-
-            if type == 'Crack':
-                print "Skipping Crack " + rname
-                continue
-
-            t = tr.find('a', href=re.compile('/release/download'))
-            if t:
-                url = baseUrl + t.attrs[0][1]
-                url = url.strip()
-            print url
-            releases.append(Release(rid, rname, name, type, year, [url]))
-
-        return Group(id, name, tla, releases)
-
-
-# Main operation
-# Derive a set of webpages from where to find all release links
-# List or download them
-# Can be - set of groups webpages
-# Top demos page
-# 
-def main(argv):
-    global no_clobber
-    global packArcs
-
-    for f in open('packarcs.txt').readlines():
-        f = f.strip()
-        if len(f) > 1 and f[0] != '#' and f[0] != ';':
-            packArcs.append(f)
-
-    csdb = CSDBSpider()
-    rel = None
-    group = None
-    # while True:
-    # line = raw_input('>')
-    # line = argv
-
-    p = optparse.OptionParser(
-        usage="usage: %prog [options] <command> [args...]\n\nCommands:\n findgrp <groupname> = Search for a group by name\n list = List releases (with filtering) for a groupid\n findrel = Find releases")
-    p.add_option("-D", "--download",
-                 action="store_true", dest="download", default=False,
-                 help="Download matching releases")
-    p.add_option("-m", "--max",
-                 type="int", dest="max", action="store", default=10,
-                 help="Max number of releases")
-    p.add_option("-g", "--group",
-                 type="int", dest="groupid", action="append",
-                 help="Set the Demo group ID to use")
-    p.add_option("-d", "--to-d64",
-                 action="store_true", dest="to_d64", default=False,
-                 help="Convert all formats to D64 (disk images)")
-    p.add_option("-p", "--to-prg",
-                 action="store_true", dest="to_prg", default=False,
-                 help="Convert all formats to disk PRG files")
-    p.add_option("-N", "--no-clobber",
-                 action="store_true", dest="no_clobber", default=False,
-                 help="Dont write files to non-empty directories")
-    p.add_option("-T", "--template",
-                 type="string", dest="template", default='DEMOS/%group/%name{ - %year}{ (%type)}',
-                 help="Template for output files")
-
-    p.add_option("-G", "--redo-groups",
-                 action="store_true", dest="redo_groups", default=False,
-                 help="Add all previously cached groups to the grouplist")
-
-    p.add_option("-F", "--filter", dest="filter", default='A', help=
-    '''Filter out only certain types of productions - each letter in the given argument represents one type of release; 'd' = demo, 'o' = one-file demo / dentro, 'i' = intro, 'v' = invitro, 'e' = game, 'c' = crack 'm' = music, 'g' = graphics, 'M' = music collection, 'G' = graphics collection, 't' = tool, 's' = diskmag, 'x' = misc. 'A' = All!''')
-
-    opts, arguments = p.parse_args()
-    opts.template = opts.template.replace('%', '$')
-
-    if not len(arguments):
-        print "Try `csdb --help` for more information\n\nExample:\n> csdb find horizon\n> csdb list -g 2315 -F doiv\n> csdb dl -g 2315 -F io"
-
-    no_clobber = opts.no_clobber
-
-    #	print opts
-    #	print arguments
-
-    if opts.redo_groups:
-        if not opts.groupid:
-            opts.groupid = []
-
-        b2 = urllib.urlencode(baseUrl)
-        print b2
-        gr = re.compile(b2 + '%2Fgroup%2F%3Fid%3D(\d+)')
-
-        res = os.listdir('urlcache')
-        for r in res:
-            m = gr.match(r)
-            if m:
-                opts.groupid.append(int(m.group(1)))
-
-    print opts.groupid
-    what = opts.filter
-
-    rels = []
-
-    # l = argv #line.split()
-    l = arguments;
-    if len(l) >= 1:
-        if l[0] == 'findgrp':
-            groups = csdb.findGroups(l[1])
-            if groups:
-                for g in groups:
-                    print '(%d) %s' % g
-            else:
-                print "Could not find any groups"
-        elif l[0] == 'group':
-            if not len(opts.groupid):
-                print "You must specify a groupid!"
-                return
-            for gid in opts.groupid:
-                # try :
-                group = csdb.getGroup(gid)
-                if group:
-                    print 'Trying to download releases from %s' % group.name
-                    print "\n"
-                    group.releases.sort(lambda x, y: x.year > y.year)
-                    rels.extend(group.releases)
-                # print rels
-
-        elif l[0] == 'findrel':
-            print "Searching for %s" % l[1]
-            rels = CSDBSpider.findReleases(l[1])
-
-        elif l[0] == 'toplist':
-            print "Getting Release info for the Top %d" % opts.max
-            rels = CSDBSpider.getReleases(baseUrl + '/toplist.php?type=release&subtype=(1%2C2)', opts.max, True)
-
-        elif l[0] == 'topgames':
-            print "Getting Release info for the Top %d" % opts.max
-            rels = CSDBSpider.getReleases(baseUrl + '/toplist.php?type=release&subtype=%2811%29', opts.max, True)
-
-        elif l[0] == 'topcracks':
-            print "Getting Release info for the Top %d" % opts.max
-            rels = CSDBSpider.getReleases(baseUrl + '/toplist.php?type=release&subtype=%2820%29', opts.max, True)
-
-        elif l[0] == 'topprev':
-            print "Getting Release info for the Top %d" % opts.max
-            rels = CSDBSpider.getReleases(baseUrl + '/toplist.php?type=release&subtype=%2819%29', opts.max, True)
-        elif l[0] == 'topgfx':
-            print "Getting Release info for the Top %d" % opts.max
-            rels = CSDBSpider.getReleases(baseUrl + '/toplist.php?type=release&subtype=%289%29', opts.max, True)
-        elif l[0] == 'easyflash':
-            rels = CSDBSpider.getReleases(baseUrl + '/search/?seinsel=releases&search=%5Beasyflash%5D&all=1', opts.max,
-                                          True)
-        elif l[0] == 'event':
-
-            events = []
-            if l[1] == 'theparty':
-                events = [54, 53, 32, 18, 10, 25, 24, 3, 6, 7, 29, 514]
-            elif l[1] == 'datastorm':
-                events = [1577, 1681, 1846, 2001, 2158]
-            elif l[1] == 'breakpoint':
-                events = [453, 634, 884, 1038, 1210, 1358, 1501, 1613]
-            elif l[1] == 'edison':
-                events = [1788, 1935, 2046, 2225, 2385, 2506]
-            elif l[1] == 'lcp':
-                events = [52, 62, 41, 348, 487, 756, 931, 1506, 1693, 1422]
-            elif l[1] == 'bfp':
-                events = [1050, 1225, 2092]
-            elif l[1] == 'x':
-                events = [30, 76, 26, 211, 39, 31, 700, 966, 1362, 1610, 1708, 2082]
-            elif l[1] == 'gubbdata':
-                events = [1928, 2075, 2316, 2453]
-            elif l[1] == 'assembly':
-                events = [117, 123, 127, 173, 175, 185, 194, 47, 256, 51, 346, 606, 784, 929, 1100, 1315, 1454, 1564,
-                          1662, 1840, 1950, 2393]
-            elif l[1] == 'mekka':
-                events = [59, 131, 104, 28, 8, 250]
-            elif l[1] == 'floppy':
-                events = [43, 27, 251, 448, 709, 878]
-            else:
-                events = [int(l[1])]
-
-            rels = []
-            for evt in events:
-                rels = rels + CSDBSpider.getReleases(baseUrl + '/event/?id=' + str(evt), opts.max, True)
-
-        if rels:
-
-            if what != 'A':
-                for r in rels:
-                    r.load()
-                rels = [r for r in rels if what.find(r.tletter) >= 0]
-
-            if opts.download:
-                print "\nDownloading releases"
-            else:
-                print "\nListing releases"
-            i = 1
-            for r in rels:
-                if r:
-                    r.i = "%d" % i
-                    r.i2 = "%02d" % i
-                    r.i3 = "%03d" % i
-                    print r
-                    if opts.download:
-                        r.update()
-                        r.download(opts.to_d64, opts.to_prg, templ=opts.template)
-                    i += 1
-                else:
-                    print "None release ?!"
-
-            if possiblePack:
-                print "### Possible packs"
-                for p in possiblePack:
-                    print p
-
-
-if __name__ == "__main__":
-    main(sys.argv[1:])

@@ -28,7 +28,7 @@ from tools64 import unpack
 class URLGetter :
 	def __init__(self, url):
 		
-		self.contents = None
+		self.contents : str | None  = None
 		
 		self.realu = url
 		
@@ -43,7 +43,7 @@ class URLGetter :
 			self.realu = f.readline().strip()
 			self.contents = f.read(32*1024*1024)
 			f.close()
-			print "Using cached result"
+			print("Using cached result")
 			return
 		except :
 			pass
@@ -53,22 +53,22 @@ class URLGetter :
 		try :
 			self.url = urllib.urlopen(url)
 		except :
-			print "Failed to get file"
+			print("Failed to get file")
 			return
 		
 		newu = self.url.geturl()
-		print '"%s" vs "%s"' % (url, newu)
+		print('"%s" vs "%s"' % (url, newu))
 		if newu != url :
 			self.realu = newu
 			x = urlparse.urlsplit(newu)
 			u2 = urlparse.urlunsplit((x[0], x[1], urllib.quote(x[2]), x[3], x[4]))
-			print "Reopening %s" % (u2)
+			print("Reopening %s" % (u2))
 			try :
 				self.url = urllib.urlopen(u2)
 			except :
-				print "Failed to get file"
+				print("Failed to get file")
 		
-	def read(self):		
+	def read(self) -> str:		
 		if not self.contents :
 			self.contents = self.url.read(64*1024*1024)
 			try :

@@ -17,7 +17,7 @@ from shutil import which
 from bs4 import BeautifulSoup, Tag
 
 from tools64 import Release, unpack
-from utils import fixname
+from utils import fixname, download
 
 
 @dataclass
@@ -26,22 +26,6 @@ class Link:
     place: int = 0
     rating: float = 0
     name: str = ""
-
-
-def download(url: str) -> Path | None:
-    t = urllib.parse.unquote_plus(url)
-    name = urllib.parse.quote_plus(t)
-    file_name = Path(f"releases/{name}")
-    if not file_name.exists():
-        try:
-            data = urllib.request.urlopen(url.replace(" ", "%20")).read()
-            file_name.write_bytes(data)
-        except urllib.error.HTTPError:
-            return None
-        except urllib.error.URLError:
-            return None
-    return file_name
-
 
 type What = Literal["demo", "onefile", "game"]
 
@@ -330,12 +314,6 @@ def main():
     )
 
     arg_parser.add_argument(
-        "-d",
-        "--target-dir",
-        default="Demos",
-        help="Path to created directory. Used when filtering and organizing",
-    )
-    arg_parser.add_argument(
         "-p", "--party", nargs="*", default=None, help="Download party releases"
     )
     arg_parser.add_argument(
@@ -356,18 +334,6 @@ def main():
         help="Target template",
         default="{rank:03}. {group} - {title} ({year})",
     )
-    # arg_parser.add_argument(
-    #     "-o",
-    #     "--organize",
-    #     default=True,
-    #     help="Reorganize directories so each directory contains an apropriate number of files.",
-    # )
-    # arg_parser.add_argument(
-    #     "-x", "--exclude", nargs="*", action=Store, help="Add an exclusion rule"
-    # )
-    # arg_parser.add_argument(
-    #     "-i", "--include", nargs="*", action=Store, help="Add an inclusion rule"
-    # )
 
     args = arg_parser.parse_args()
 
@@ -376,8 +342,7 @@ def main():
         arg_parser.print_help()
         sys.exit(0)
 
-    template = str(Path(args.target_dir) / args.directory_template)
-    print(template)
+    template = args.directory_template
 
     max_year, min_year = 99999, 1
     if args.year_range is not None:
@@ -395,15 +360,15 @@ def main():
     max_rel: int = int(args.max_releases)
 
     links: list[Link] = []
-    print(args.party)
 
-    parties : list[str] = args.party
-    if len(parties) == 1:
-        pids = search("events", parties[0])
-        for pid in pids:
-            party = get_party(pid)
-            for compo in party.compos:
-                links += compo.releases
+    if args.party:
+        parties : list[str] = args.party
+        if len(parties) == 1:
+            pids = search("events", parties[0])
+            for pid in pids:
+                party = get_party(pid)
+                for compo in party.compos:
+                    links += compo.releases
     # if args.party:
     #     parties: list[str] = args.party
     #     for party in parties:

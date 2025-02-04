@@ -138,7 +138,7 @@ def worker():
 
 def convert_gb64(template: str, game_dir: Path, no_op: bool = False):
     threads: list[threading.Thread] = []
-    for _ in range(8):
+    for _ in range(48):
         t = threading.Thread(target=worker)
         t.start()
         threads.append(t)

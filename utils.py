@@ -94,6 +94,7 @@ def download(url: str) -> Path | None:
     t = urllib.parse.unquote_plus(url)
     name = urllib.parse.quote_plus(t)
     file_name = Path(f"releases/{name}")
+    os.makedirs("releases", exist_ok=True)
     if not file_name.exists():
         try:
             data = urllib.request.urlopen(url.replace(' ', '%20')).read()

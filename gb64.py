@@ -60,6 +60,13 @@ avaiable: dict[str, FC] = {
     "type_in": lambda r: r.is_typein(),
     "have_sid": lambda r: len(r.sids) > 0,
     "year_known": lambda r: r.year > 0,
+    "standard": lambda r: (
+        r.is_commercial()
+        and not r.is_typein()
+        and r.year > 0
+        and r.language == "English"
+        and not r.type.startswith("Edu")
+    ),
     "true": lambda r: True,
 }
 
@@ -117,7 +124,7 @@ def filter_gb64(games: Path, target: Path, no_op: bool = False):
 
 template = ""
 
-q: queue.Queue[Callable[[], None] | None] = queue.Queue()
+q: queue.Queue[Callable[[], None] | None] = queue.Queue(50)
 
 
 def worker():
@@ -129,7 +136,7 @@ def worker():
         q.task_done()
 
 
-def convert_gb64(template: str, games: Path, no_op: bool = False):
+def convert_gb64(template: str, game_dir: Path, no_op: bool = False):
     threads: list[threading.Thread] = []
     for _ in range(8):
         t = threading.Thread(target=worker)
@@ -137,7 +144,14 @@ def convert_gb64(template: str, games: Path, no_op: bool = False):
         threads.append(t)
 
     c = 0
-    for zip in games.glob("**/*.zip"):
+    games = list(game_dir.glob("**/*.zip"))
+
+    print(f"Converting {len(games)} games")
+    for zip in games:
+        percent = c * 100 // len(games)
+        done = "=" * (percent // 2)
+        left = "-" * ((100 - percent) // 2)
+        sys.stdout.write(f"\r[{done}{left}] {percent}%  ")
         # print(zip)
         udir = Path(f"_unpack{c}")
         c += 1
@@ -160,7 +174,7 @@ def convert(zip: Path, udir: Path, template: str, no_op: bool):
             try:
                 os.makedirs(target_dir)
             except FileExistsError:
-                print(f"Warning: {target_dir} exists")
+                # print(f"Warning: {target_dir} exists")
                 target_dir = Path(str(target_dir) + f" ({rel.id})")
             os.rename(udir, target_dir)
             return
@@ -218,7 +232,7 @@ def main():
         "-d",
         "--destination-template",
         help="Target template",
-        default="Games/{A}/{title} ({year})",
+        default="Games/{A}/{title}{pyear}",
     )
     arg_parser.add_argument(
         "-o",
@@ -258,7 +272,9 @@ def main():
     if "convert" in actions:
         if games is None:
             sys.exit("You must specify Gamebase directory!")
+
         convert_gb64(template, games)
+
     if "filter" in actions:
         if out_dir is None:
             sys.exit("You must specify a target directory!")

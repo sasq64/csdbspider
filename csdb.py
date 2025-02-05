@@ -11,13 +11,13 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 from shutil import which
 
 from bs4 import BeautifulSoup, Tag
 
 from tools64 import Release, unpack
-from utils import fixname, download
+from utils import download
 
 
 @dataclass
@@ -27,20 +27,17 @@ class Link:
     rating: float = 0
     name: str = ""
 
+
 type What = Literal["demo", "onefile", "game"]
 
 types: dict[What, int] = {"demo": 1, "onefile": 2, "game": 3}
 
 
-def get_top_list(what: What) -> str:
-    if what in types.keys():
-        t = types[what]
-        url = rf"https://csdb.dk/toplist.php?type=release&subtype=({t})"
-    else:
-        raise NameError
+def get_soup(url: str) -> BeautifulSoup:
     try:
         data: bytes = urllib.request.urlopen(url).read()
-        return data.decode()
+        doc = data.decode()
+        return BeautifulSoup(doc, "html.parser")
     except urllib.error.URLError as e:
         print(f"**Eror: Can not download from CSDb: {e.reason}")
         sys.exit(1)
@@ -48,10 +45,8 @@ def get_top_list(what: What) -> str:
 
 def get_groups() -> list[tuple[str, int]]:
     result: list[tuple[str, int]] = []
-    url = r"https://csdb.dk/toplist.php?type=group&subtype=(1)"
-    data: bytes = urllib.request.urlopen(url).read()
-    doc = data.decode()
-    links = get_releases_from_csdb_toplist(doc)
+    soup = get_soup(r"https://csdb.dk/toplist.php?type=group&subtype=(1)")
+    links = get_links_from_csdb_page(soup)
     for link in links:
         result.append((link.name, link.id))
         print(f"{link.name} {link.id}")
@@ -59,34 +54,47 @@ def get_groups() -> list[tuple[str, int]]:
 
 
 def search(what: str, text: str) -> list[int]:
+    print(text)
     text = urllib.parse.quote(text)
-    url = rf"https://csdb.dk/search/?seinsel={what}&search={text}"
-    data: bytes = urllib.request.urlopen(url).read()
-    doc = data.decode()
-    soup = BeautifulSoup(doc, "html.parser")
+    print(text)
+    soup = get_soup(rf"https://csdb.dk/search/?seinsel={what}&search={text}")
+    return search_soup(soup)
+
+
+def search_soup(soup: BeautifulSoup) -> list[int]:
+    # <meta property="og:url" content="https://csdb.dk/group/?id=7" />
+    meta = soup.find("meta", attrs={"property": "og:url"})
+    if isinstance(meta, Tag):
+        url = meta.attrs["content"]
+        assert isinstance(url, str)
+        parts = url.split("=")
+        if len(parts) > 1 and parts[0].endswith("/?id"):
+            print("Got single id in result")
+            return [int(parts[1])]
     ol = soup.find("ol")
-    links : list[int] = []
+    links: list[int] = []
+
     if isinstance(ol, Tag):
-        for i,li in enumerate(ol.find_all("li")):
-            href : str = li.find("a").attrs["href"]
-            print(f"{i} {href}\n{li}")
+        for i, li in enumerate(ol.find_all("li")):
+            href: str = li.find("a").attrs["href"]
+            #print(f"{i} {href}\n{li}")
             parts = href.split("=")
+            print(parts)
             links.append(int(parts[1]))
     return links
 
 
-
 def get_releases(what: What) -> list[Link]:
-    doc = get_top_list(what)
-    return get_releases_from_csdb_toplist(doc)
-
-
-def get_releases_from_csdb_toplist(doc: str | BeautifulSoup) -> list[Link]:
-    if isinstance(doc, BeautifulSoup):
-        soup = doc
+    if what in types.keys():
+        t = types[what]
+        url = rf"https://csdb.dk/toplist.php?type=release&subtype=({t})"
     else:
-        soup = BeautifulSoup(doc, "html.parser")
+        raise NameError
+    soup = get_soup(url)
+    return get_links_from_csdb_page(soup)
 
+
+def get_links_from_csdb_page(soup: BeautifulSoup) -> list[Link]:
     # Find starting table
     b = soup.find("b", string="Place")
     table = b.find_parent("table") if b else None
@@ -114,6 +122,17 @@ def get_releases_from_csdb_toplist(doc: str | BeautifulSoup) -> list[Link]:
     return releases
 
 
+def test_search():
+    t = Path("testdata/oxyron.html").read_bytes().decode()
+    soup = BeautifulSoup(t, "html.parser")
+    result = search_soup(soup)
+    assert len(result) == 1 and result[0] == 7
+    t = Path("testdata/crackers.html").read_bytes().decode()
+    soup = BeautifulSoup(t, "html.parser")
+    result = search_soup(soup)
+    assert len(result) > 10
+
+
 def get_csdb_xml(what: str, id: int, depth: int = 2):
     cache = Path(f".{what}s")
     os.makedirs(cache, exist_ok=True)
@@ -133,35 +152,41 @@ def get_csdb_xml(what: str, id: int, depth: int = 2):
     tree = ET.fromstring(text)
     return tree
 
-def get_text(elem: ET.Element | None, default : str = "") -> str:
+
+def get_text(elem: ET.Element | None, default: str = "") -> str:
     if elem is not None and elem.text is not None:
         return elem.text
     return default
 
-def get_int(elem: ET.Element | None, default : int = -1) -> int:
+
+def get_int(elem: ET.Element | None, default: int = -1) -> int:
     if elem is not None and elem.text is not None:
         return int(elem.text)
     return default
 
-def get_float(elem: ET.Element | None, default : float = -1) -> float:
+
+def get_float(elem: ET.Element | None, default: float = -1) -> float:
     if elem is not None and elem.text is not None:
         return float(elem.text)
     return default
+
 
 @dataclass
 class Compo:
     name: str = ""
     releases: list[Link] = field(default_factory=list)
 
-@dataclass
-class Party:
-    name: str = ""
-    compos: list[Compo] =  field(default_factory=list)
 
-def get_party(id:int) -> Party:
+@dataclass
+class Event:
+    name: str = ""
+    compos: list[Compo] = field(default_factory=list)
+
+
+def get_event(id: int) -> Event:
     tree = get_csdb_xml("event", id, 2)
     name = get_text(tree.find("./Event/Name"))
-    party = Party(name)
+    event = Event(name)
     compos = tree.findall("./Event/Compo")
     for c in compos:
         type = get_text(c.find("./Type"))
@@ -171,9 +196,9 @@ def get_party(id:int) -> Party:
             type = get_text(rel.find("./Type"))
             id = get_int(rel.find("./ID"))
             compo.releases.append(Link(id, place))
-        party.compos.append(compo)
-    return party
-    
+        event.compos.append(compo)
+    return event
+
 
 def get_group_releases(id: int) -> list[Link]:
     tree = get_csdb_xml("group", id, 2)
@@ -182,7 +207,7 @@ def get_group_releases(id: int) -> list[Link]:
     name = get_text(n, "")
 
     links: list[Link] = []
-    print(f"{len(rels)}")
+    print(f"{name}: {len(rels)}")
     for rel in rels:
         id_tag = rel.find("./ID")
         if id_tag is None or id_tag.text is None:
@@ -206,19 +231,19 @@ def populate_release(link: Link) -> Release | None:
     release.title = name.text if name.text is not None else "?"
     event = tree.find(".//ReleasedAt/Event")
     if event is not None:
-        release.party = get_text(event.find("./Name"))
+        release.event = get_text(event.find("./Name"))
     release.place = get_int(tree.find(".//Achievement/Place"))
     release.compo = get_text(tree.find(".//Achievement/Compo"), "No Compo")
 
     dls = tree.findall(".//DownloadLink")
-    temp : list[tuple[int, str]] = []
+    temp: list[tuple[int, str]] = []
     for dl in dls:
         url = get_text(dl.find("Link"))
         count = get_int(dl.find("Downloads"))
         temp.append((count, url))
     if len(temp) > 1:
-        temp.sort(key = lambda t: t[0], reverse=True) 
-    release.downloads = list([url for _,url in temp])
+        temp.sort(key=lambda t: t[0], reverse=True)
+    release.downloads = list([url for _, url in temp])
     groups = tree.findall(".//ReleasedBy/Group/Name")
     if len(groups) == 0:
         groups = tree.findall(".//ReleasedBy/Handle/Handle")
@@ -302,49 +327,117 @@ def check_tools() -> bool:
     )
 
 
+def log(txt: str):
+    print(txt)
+
+
+def filter_all(rel: Release):
+    return True
+
+
+def filter_demos(rel: Release):
+    return rel.is_demo()
+
+
+def filter_demos_intros(rel: Release):
+    return rel.is_demo() or rel.is_intro()
+
+
+def filter_non_cracks(rel: Release):
+    return not rel.is_crack()
+
+
+def filter_none(rel: Release):
+    return False
+
+
 def main():
+    examples = """
+# Download 10 best demos
+./csdb.py -l demo -m 10
+
+# Download Fairlight demos
+./csdb.py -g Fairlight -t "Groups/{group}/{qyear} - {title} [{type}]"
+
+# Download Gubbdata 2021 releases 
+./csdb.py -e "Gubbdata 2021" -t "Parties/{event}/{compo}/{{place:02}. }{group} - {title}"
+"""
     if not check_tools():
         return 1
     unpack_precache()
 
-
     arg_parser = argparse.ArgumentParser(
         prog="csdb_tool",
-        description="Scrape CSDb",
+        description="Scrape CSDb.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     arg_parser.add_argument(
-        "-p", "--party", nargs="*", default=None, help="Download party releases"
+        "-e", "--event", nargs="*", default=None, help="Download event releases. Argument should either be a list of IDs, or an event name to search for."
     )
     arg_parser.add_argument(
-        "-g", "--groups", nargs="*", default=None, help="Download group releases"
+        "-g", "--groups", nargs="*", default=None, help="Download group releases. Argument should either be a list of IDs, or a group name to search for."
     )
     arg_parser.add_argument(
-        "-l", "--top-list", action='store_true', help="Download top list releases"
+        "-l",
+        "--top-list",
+        choices=["demo", "onefile", "game"],
+        help="Download top list releases from given type.",
     )
-    arg_parser.add_argument("-w", "--what", help="Download type", default="demo")
+    arg_parser.add_argument(
+        "-f",
+        "--filter",
+        help="Types of releases to accept",
+        default="non-cracks",
+        choices=["all", "non-cracks", "demos", "none"],
+    )
+    arg_parser.add_argument(
+        "-T", "--types", help="Explicit list of types to download. Matches (end of) CSDb release types.", nargs="*", default=None
+    )
     arg_parser.add_argument(
         "-m", "--max-releases", help="Max releases to download", default=500
     )
-    arg_parser.add_argument("-y", "--year-range", help="Years to download")
-    arg_parser.add_argument("--to-prg", help="Convert D64 to prg", default=False)
+    arg_parser.add_argument("-y", "--year-range", help="Limit years to download (ie 1984 or 1990:1994)")
+    arg_parser.add_argument(
+        "-r", "--min-rating", help="Minium rating; 0 = filter out unrated."
+    )
+    arg_parser.add_argument(
+        "--to-prg",
+        help="Convert D64 to prg",
+        default=False,
+    )
     arg_parser.add_argument(
         "-t",
         "--directory-template",
-        help="Target template",
-        default="{rank:03}. {group} - {title} ({year})",
+        help="Target template; how to save downloaded files",
+        default="Demos/{rank:03}. {group} - {title}{ ({year})}",
     )
 
     args = arg_parser.parse_args()
+    min_rating = -1
 
-    if args.groups is None and args.party is None and not args.top_list:
-        print("*NOTE*: You must specify what to download, groups or top-list\n")
+    rel_types: list[str] | None = args.types
+    filter: Callable[[Release], bool] = filter_non_cracks
+
+    if rel_types is not None:
+        filter = filter_none
+
+    if args.filter == "all":
+        filter = filter_all
+    elif args.filter == "demos":
+        filter = filter_demos
+    elif args.filter == "none":
+        filter = filter_none
+
+    if args.groups is None and args.event is None and args.top_list is None:
+        print("*NOTE*: You must specify what to download; Events, groups or top-list.\nExamples:")
+        print(examples)
         arg_parser.print_help()
         sys.exit(0)
 
     template = args.directory_template
 
-    max_year, min_year = 99999, 1
+    max_year, min_year = 99999, -1
     if args.year_range is not None:
         yr: str = args.year_range
         parts = yr.strip().split(":")
@@ -361,40 +454,50 @@ def main():
 
     links: list[Link] = []
 
-    if args.party:
-        parties : list[str] = args.party
-        if len(parties) == 1:
-            pids = search("events", parties[0])
-            for pid in pids:
-                party = get_party(pid)
-                for compo in party.compos:
-                    links += compo.releases
-    # if args.party:
-    #     parties: list[str] = args.party
-    #     for party in parties:
-    #         party = get_party(int(party))
-    #         for compo in party.compos:
-    #             links += compo.releases
-    elif args.groups:
+    if args.event is not None:
+        events: list[str] = args.event
+        if len(events) > 0:
+            if len(events) == 1 and not events[0].isdigit():
+                pids = search("events", events[0])
+                log(f"Adding {len(pids)} events")
+                for pid in pids:
+                    event = get_event(pid)
+                    for compo in event.compos:
+                        links += compo.releases
+            else:
+                for event in events:
+                    if not event.isdigit():
+                        print("*NOTE* Multiple events needs to all be integers (ids)")
+                        sys.exit(0)
+                    event = get_event(int(event))
+                    for compo in event.compos:
+                        links += compo.releases
+
+    if args.groups is not None:
         groups: list[str] = args.groups
         print(groups)
-        if len(groups) == 0:
-            get_groups()
-            return
-        if groups[0] == "ALL":
-            print("Getting all groups")
-            all = get_groups()
-            all = all[:500]
-            for _, id in all:
-                links += get_group_releases(id)
+        if len(groups) == 1 and not groups[0].isdigit():
+            if groups[0] == "TOP":
+                print("Getting all groups")
+                all = get_groups()
+                all = all[:500]
+                for _, id in all:
+                    links += get_group_releases(id)
+            else:
+                pids = search("groups", groups[0])
+                for id in pids:
+                    links += get_group_releases(id)
         else:
             for group in groups:
                 id = int(group)
                 links += get_group_releases(id)
-    else:
-        what: What = args.what
+
+    if args.top_list is not None:
+        what: What = args.top_list
+        print(f"WHAT: {what}")
         links = get_releases(what)
-        print(f"Found {len(links)} releases in {what} toplist")
+
+    print(f"Fetching {len(links)} releases")
 
     print("Fetching metadata...")
     count = 0
@@ -408,20 +511,30 @@ def main():
     for link in links:
         rel = populate_release(link)
         if rel is None:
+            print("NONE")
             continue
         if args.groups is not None:
             rel.group = link.name
         if rel.year < min_year or rel.year > max_year:
+            print("YEAR")
             continue
-        # if rel.type != "C64 Demo":
-        #     continue
-        # if rel.rating == 0:
-        #    continue
+        ok = False
+        if rel_types is not None:
+            for rt in rel_types:
+                if rel.type.endswith(rt):
+                    ok = True
+                    break
+        ok |= filter(rel)
+        if not ok:
+            continue
+        if rel.rating < min_rating:
+            continue
         releases.append(rel)
         if len(releases) >= max_rel:
             break
-    print("Downloading releases")
+    print(f"Downloading {len(releases)} releases")
     download_releases(releases, template, to_prg)
 
 
-main()
+if __name__ == "__main__":
+    main()

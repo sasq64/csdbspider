@@ -40,6 +40,24 @@ class Release:
     language: str = ""
     sids: list[str] = field(default_factory=list)
 
+    def is_crack(self):
+        return self.type.endswith("Crack")
+
+    def is_demo(self):
+        return self.type.endswith("Demo")
+
+    def is_intro(self):
+        return self.type.endswith("Intro")
+
+    def is_music(self):
+        return self.type.endswith("Music")
+
+    def is_graphics(self):
+        return self.type.endswith("Graphics")
+
+    def is_game(self):
+        return self.type.endswith("Game")
+
     def is_commercial(self):
         packs = [ "Loadstar", "CP Verlag", "Binary Zone", " Club", "(Preview", " PD", "(Created", "Public Domain", "Not Publ", "Unknown"]
         rc = not any(s in self.published for s in packs)
@@ -63,7 +81,7 @@ class Release:
         d['A'] = fixname(self.title[0].upper())
         d['i'] = self.title[0]
         d['a'] = fixname(self.title[0])
-        d['pyear'] = "" if self.year == -1 else f" ({self.year})"
+        d['qyear'] = "XXXX" if self.year == -1 else self.year
 
         r = re.compile(r'{[^{}]*({[^{}]+})[^{}]*}')
         while True:

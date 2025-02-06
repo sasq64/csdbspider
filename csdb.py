@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import bisect
 from dataclasses import dataclass, field
 import os
 import re
@@ -11,7 +12,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 from shutil import which
 
 from bs4 import BeautifulSoup, Tag
@@ -28,9 +29,19 @@ class Link:
     name: str = ""
 
 
-type What = Literal["demo", "onefile", "game"]
+@dataclass
+class Compo:
+    name: str = ""
+    releases: list[Link] = field(default_factory=list)
 
-types: dict[What, int] = {"demo": 1, "onefile": 2, "game": 3}
+
+@dataclass
+class Event:
+    name: str = ""
+    compos: list[Compo] = field(default_factory=list)
+
+
+types: dict[str, int] = {"demo": 1, "onefile": 2, "game": 3}
 
 
 def get_soup(url: str) -> BeautifulSoup:
@@ -77,14 +88,14 @@ def search_soup(soup: BeautifulSoup) -> list[int]:
     if isinstance(ol, Tag):
         for i, li in enumerate(ol.find_all("li")):
             href: str = li.find("a").attrs["href"]
-            #print(f"{i} {href}\n{li}")
+            # print(f"{i} {href}\n{li}")
             parts = href.split("=")
             print(parts)
             links.append(int(parts[1]))
     return links
 
 
-def get_releases(what: What) -> list[Link]:
+def get_toplist_releases(what: str) -> list[Link]:
     if what in types.keys():
         t = types[what]
         url = rf"https://csdb.dk/toplist.php?type=release&subtype=({t})"
@@ -120,17 +131,6 @@ def get_links_from_csdb_page(soup: BeautifulSoup) -> list[Link]:
         else:
             ok = tr.find("b", string=votes)
     return releases
-
-
-def test_search():
-    t = Path("testdata/oxyron.html").read_bytes().decode()
-    soup = BeautifulSoup(t, "html.parser")
-    result = search_soup(soup)
-    assert len(result) == 1 and result[0] == 7
-    t = Path("testdata/crackers.html").read_bytes().decode()
-    soup = BeautifulSoup(t, "html.parser")
-    result = search_soup(soup)
-    assert len(result) > 10
 
 
 def get_csdb_xml(what: str, id: int, depth: int = 2):
@@ -169,18 +169,6 @@ def get_float(elem: ET.Element | None, default: float = -1) -> float:
     if elem is not None and elem.text is not None:
         return float(elem.text)
     return default
-
-
-@dataclass
-class Compo:
-    name: str = ""
-    releases: list[Link] = field(default_factory=list)
-
-
-@dataclass
-class Event:
-    name: str = ""
-    compos: list[Compo] = field(default_factory=list)
 
 
 def get_event(id: int) -> Event:
@@ -240,10 +228,8 @@ def populate_release(link: Link) -> Release | None:
     for dl in dls:
         url = get_text(dl.find("Link"))
         count = get_int(dl.find("Downloads"))
-        temp.append((count, url))
-    if len(temp) > 1:
-        temp.sort(key=lambda t: t[0], reverse=True)
-    release.downloads = list([url for _, url in temp])
+        bisect.insort(temp, (count, url))
+    release.downloads = list([i[1] for i in reversed(temp)])
     groups = tree.findall(".//ReleasedBy/Group/Name")
     if len(groups) == 0:
         groups = tree.findall(".//ReleasedBy/Handle/Handle")
@@ -256,6 +242,7 @@ def populate_release(link: Link) -> Release | None:
     release.type = get_text(type)
     gn = [n.text for n in groups if n.text is not None]
     release.group = gn[0] if len(gn) > 0 else "Unknown"
+    release.groups = gn
     return release
 
 
@@ -373,10 +360,18 @@ def main():
     )
 
     arg_parser.add_argument(
-        "-e", "--event", nargs="*", default=None, help="Download event releases. Argument should either be a list of IDs, or an event name to search for."
+        "-e",
+        "--event",
+        nargs="*",
+        default=None,
+        help="Download event releases. Argument should either be a list of IDs, or an event name to search for.",
     )
     arg_parser.add_argument(
-        "-g", "--groups", nargs="*", default=None, help="Download group releases. Argument should either be a list of IDs, or a group name to search for."
+        "-g",
+        "--groups",
+        nargs="*",
+        default=None,
+        help="Download group releases. Argument should either be a list of IDs, or a group name to search for.",
     )
     arg_parser.add_argument(
         "-l",
@@ -392,12 +387,18 @@ def main():
         choices=["all", "non-cracks", "demos", "none"],
     )
     arg_parser.add_argument(
-        "-T", "--types", help="Explicit list of types to download. Matches (end of) CSDb release types.", nargs="*", default=None
+        "-T",
+        "--types",
+        help="Explicit list of types to download. Matches (end of) CSDb release types.",
+        nargs="*",
+        default=None,
     )
     arg_parser.add_argument(
         "-m", "--max-releases", help="Max releases to download", default=500
     )
-    arg_parser.add_argument("-y", "--year-range", help="Limit years to download (ie 1984 or 1990:1994)")
+    arg_parser.add_argument(
+        "-y", "--year-range", help="Limit years to download (ie 1984 or 1990:1994)"
+    )
     arg_parser.add_argument(
         "-r", "--min-rating", help="Minium rating; 0 = filter out unrated."
     )
@@ -430,7 +431,9 @@ def main():
         filter = filter_none
 
     if args.groups is None and args.event is None and args.top_list is None:
-        print("*NOTE*: You must specify what to download; Events, groups or top-list.\nExamples:")
+        print(
+            "*NOTE*: You must specify what to download; Events, groups or top-list.\nExamples:"
+        )
         print(examples)
         arg_parser.print_help()
         sys.exit(0)
@@ -493,13 +496,12 @@ def main():
                 links += get_group_releases(id)
 
     if args.top_list is not None:
-        what: What = args.top_list
+        what: str = args.top_list
         print(f"WHAT: {what}")
-        links = get_releases(what)
+        links = get_toplist_releases(what)
 
-    print(f"Fetching {len(links)} releases")
+    print(f"Collected {len(links)} releases")
 
-    print("Fetching metadata...")
     count = 0
     for link in links:
         f = Path(".releases") / f"{link.id}.xml"
@@ -530,9 +532,29 @@ def main():
         releases.append(rel)
         if len(releases) >= max_rel:
             break
-    print(f"Downloading {len(releases)} releases")
+
+    found = 0
+    for rel in releases:
+        for url in rel.downloads:
+            t = urllib.parse.unquote_plus(url)
+            name = urllib.parse.quote_plus(t)
+            if Path(f"releases/{name}").exists():
+                found += 1
+                break
+    print(f"Need to download {len(releases)-found} releases")
     download_releases(releases, template, to_prg)
 
 
 if __name__ == "__main__":
     main()
+
+
+def test_search():
+    t = Path("testdata/oxyron.html").read_text()
+    soup = BeautifulSoup(t, "html.parser")
+    result = search_soup(soup)
+    assert len(result) == 1 and result[0] == 7
+    t = Path("testdata/crackers.html").read_text()
+    soup = BeautifulSoup(t, "html.parser")
+    result = search_soup(soup)
+    assert len(result) > 10

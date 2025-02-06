@@ -52,7 +52,7 @@ def parse_version_nfo(nfo_file: Path) -> Release:
     return rel
 
 
-type FC = Callable[[Release], bool]
+FC = Callable[[Release], bool]
 filters: list[tuple[FC, bool]] = []
 
 avaiable: dict[str, FC] = {
@@ -138,7 +138,7 @@ def worker():
 
 def convert_gb64(template: str, game_dir: Path, no_op: bool = False):
     threads: list[threading.Thread] = []
-    for _ in range(48):
+    for _ in range(8):
         t = threading.Thread(target=worker)
         t.start()
         threads.append(t)
@@ -232,7 +232,7 @@ def main():
         "-d",
         "--destination-template",
         help="Target template",
-        default="Games/{A}/{title}{pyear}",
+        default="Games/{A}/{title}{ ({year})}",
     )
     arg_parser.add_argument(
         "-o",

@@ -90,6 +90,15 @@ def reorganize(root_dir: Path, max_files: int, min_files: int = -1):
 
 #reorganize(Path("Games"), 250, 50)
 
+def get_cached(url: str) -> Path | None:
+    t = urllib.parse.unquote_plus(url)
+    name = urllib.parse.quote_plus(t)
+    file_name = Path(f"releases/{name}")
+    if file_name.exists():
+        return file_name
+    return None
+
+
 def download(url: str) -> Path | None:
     t = urllib.parse.unquote_plus(url)
     name = urllib.parse.quote_plus(t)
@@ -97,6 +106,7 @@ def download(url: str) -> Path | None:
     os.makedirs("releases", exist_ok=True)
     if not file_name.exists():
         try:
+            print(f"Downloading {url}")
             data = urllib.request.urlopen(url.replace(' ', '%20')).read()
             file_name.write_bytes(data)
         except urllib.error.HTTPError: 

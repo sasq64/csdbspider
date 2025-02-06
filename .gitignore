@@ -4,4 +4,5 @@ __pycache__/
 .releases/
 .events/
 .groups/
-
+cbmconvert.dir/
+build/

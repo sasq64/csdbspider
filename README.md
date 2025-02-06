@@ -14,7 +14,9 @@ For unpacking and repacking; `unrar`, `lha`, `7z`, and `tar`/`gz`
 
 For C64 format conversion; `cbmconvert` and `zip2disk`
 
-You can get the source code here; https://github.com/sasq64/cbmconvert
+Type `make all` to download and build _cbmconvert_, and then `sudo make install` to copy it to `/usr/local/bin`
+
+(Or you can do it manually; here: https://github.com/sasq64/cbmconvert
 
 ### Usage
 

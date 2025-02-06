@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import bisect
-from dataclasses import dataclass, field
 import os
 import re
 import subprocess
@@ -11,14 +10,15 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
 from shutil import which
+from typing import Any, Callable
 
 from bs4 import BeautifulSoup, Tag
 
 from tools64 import Release, unpack
-from utils import download
+from utils import download, get_cached
 
 
 @dataclass
@@ -60,14 +60,11 @@ def get_groups() -> list[tuple[str, int]]:
     links = get_links_from_csdb_page(soup)
     for link in links:
         result.append((link.name, link.id))
-        print(f"{link.name} {link.id}")
     return result
 
 
 def search(what: str, text: str) -> list[int]:
-    print(text)
     text = urllib.parse.quote(text)
-    print(text)
     soup = get_soup(rf"https://csdb.dk/search/?seinsel={what}&search={text}")
     return search_soup(soup)
 
@@ -90,7 +87,6 @@ def search_soup(soup: BeautifulSoup) -> list[int]:
             href: str = li.find("a").attrs["href"]
             # print(f"{i} {href}\n{li}")
             parts = href.split("=")
-            print(parts)
             links.append(int(parts[1]))
     return links
 
@@ -127,7 +123,6 @@ def get_links_from_csdb_page(soup: BeautifulSoup) -> list[Link]:
             id = int(href.split("=")[1].strip())
             rating = float(d[2].text.strip())
             releases.append(Link(id, place, rating, title))
-            # print(f"{place} {title} {id} {rating}")
         else:
             ok = tr.find("b", string=votes)
     return releases
@@ -195,7 +190,7 @@ def get_group_releases(id: int) -> list[Link]:
     name = get_text(n, "")
 
     links: list[Link] = []
-    print(f"{name}: {len(rels)}")
+    # print(f"{name}: {len(rels)}")
     for rel in rels:
         id_tag = rel.find("./ID")
         if id_tag is None or id_tag.text is None:
@@ -245,27 +240,37 @@ def populate_release(link: Link) -> Release | None:
     release.groups = gn
     return release
 
+def unpack_to(file: Path, target_dir: Path, to_prg: bool):
+    udir = Path("_unpack")
+    if target_dir.is_dir():
+        for r in target_dir.iterdir():
+            os.remove(r)
+        os.rmdir(target_dir)
+    unpack(file, udir, d64_to_prg=to_prg)
+    if len(list(udir.iterdir())) > 0:
+        os.rename(udir, target_dir)
+        return True
+    return False
 
 def download_releases(releases: list[Release], template: str, to_prg: bool):
     for release in releases:
         target_dir = Path(release.format(template))
         os.makedirs(target_dir, exist_ok=True)
         # print(target_dir)
-        udir = Path("_unpack")
         ok = False
-        for dl in release.downloads:
-            if "SourceCode" in dl:
-                continue
-            file = download(dl)
 
+        for dl in release.downloads:
+            file = get_cached(dl)
             if file is not None:
-                if target_dir.is_dir():
-                    for r in target_dir.iterdir():
-                        os.remove(r)
-                    os.rmdir(target_dir)
-                unpack(file, udir, d64_to_prg=to_prg)
-                if len(list(udir.iterdir())) > 0:
-                    os.rename(udir, target_dir)
+                if unpack_to(file, target_dir, to_prg):
+                    ok = True
+                    break
+        if ok:
+            continue
+        for dl in release.downloads:
+            file = download(dl)
+            if file is not None:
+                if unpack_to(file, target_dir, to_prg):
                     ok = True
                     break
         if not ok:
@@ -282,8 +287,6 @@ class Store(argparse.Action):
     ):
         if values is None:
             return
-        print(values)
-        print(option_string)
 
 
 def unpack_precache():
@@ -478,7 +481,6 @@ def main():
 
     if args.groups is not None:
         groups: list[str] = args.groups
-        print(groups)
         if len(groups) == 1 and not groups[0].isdigit():
             if groups[0] == "TOP":
                 print("Getting all groups")
@@ -497,7 +499,6 @@ def main():
 
     if args.top_list is not None:
         what: str = args.top_list
-        print(f"WHAT: {what}")
         links = get_toplist_releases(what)
 
     print(f"Collected {len(links)} releases")

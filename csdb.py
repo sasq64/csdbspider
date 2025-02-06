@@ -511,12 +511,10 @@ def main():
     for link in links:
         rel = populate_release(link)
         if rel is None:
-            print("NONE")
             continue
         if args.groups is not None:
             rel.group = link.name
         if rel.year < min_year or rel.year > max_year:
-            print("YEAR")
             continue
         ok = False
         if rel_types is not None:

@@ -1,6 +1,6 @@
 ## csdbspider
 
-Tool do collect, download, convert and name C64 releases from CSDb
+Tool to collect, download, convert and name C64 releases from CSDb
 
 ### Requirements
 
@@ -28,7 +28,6 @@ For instance;
 
 * Downloads for a release will be tried in order, and will be unpacked and converted to PRG or D64 if possible.
 
-* Metadata is fetched through CSDbs webservice, and will be cached. Also, metadata
-for many popular releases and groups is precached in this repo to offload CSDb.
+* Metadata is fetched through CSDbs webservice, and will be cached. Also, metadata for many popular releases and groups is precached in this repo to offload CSDb.
 
 * Downloads are also cached, so once you downloaded a particular set of releases, you can change the template and run again and it should finish quickly without downloading (almost) anything.

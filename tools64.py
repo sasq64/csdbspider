@@ -201,7 +201,7 @@ def unpack(
         elif ext == ".RAR":
             run(["unrar", "e", "-o-", "-y", archive.absolute()], cwd=targetdir)
         elif ext == ".TAR":
-            run(["tar", "-xf", archive])
+            run(["tar", "-xf", archive.absolute()], cwd=targetdir)
         elif ext == ".LHA" or ext == ".LZH":
             run(["lha", "x", archive.absolute()], cwd=targetdir)
         else:

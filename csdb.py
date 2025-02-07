@@ -87,7 +87,8 @@ def search_soup(soup: BeautifulSoup) -> list[int]:
             href: str = li.find("a").attrs["href"]
             # print(f"{i} {href}\n{li}")
             parts = href.split("=")
-            links.append(int(parts[1]))
+            if parts[1].isdigit():
+                links.append(int(parts[1]))
     return links
 
 

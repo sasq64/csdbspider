@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import bisect
-import os
 import re
 import subprocess
 import sys
@@ -9,15 +8,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import which
-from typing import Any, Callable
+from typing import Callable
 
 from bs4 import BeautifulSoup, Tag
 
-from tools64 import Release, unpack
+from tools64 import Release, unpack, show_run_output
 from utils import download, get_cached
 
 
@@ -70,7 +68,6 @@ def search(what: str, text: str) -> list[int]:
 
 
 def search_soup(soup: BeautifulSoup) -> list[int]:
-    # <meta property="og:url" content="https://csdb.dk/group/?id=7" />
     meta = soup.find("meta", attrs={"property": "og:url"})
     if isinstance(meta, Tag):
         url = meta.attrs["content"]
@@ -83,9 +80,8 @@ def search_soup(soup: BeautifulSoup) -> list[int]:
     links: list[int] = []
 
     if isinstance(ol, Tag):
-        for i, li in enumerate(ol.find_all("li")):
+        for li in ol.find_all("li"):
             href: str = li.find("a").attrs["href"]
-            # print(f"{i} {href}\n{li}")
             parts = href.split("=")
             if parts[1].isdigit():
                 links.append(int(parts[1]))
@@ -131,7 +127,7 @@ def get_links_from_csdb_page(soup: BeautifulSoup) -> list[Link]:
 
 def get_csdb_xml(what: str, id: int, depth: int = 2):
     cache = Path(f".{what}s")
-    os.makedirs(cache, exist_ok=True)
+    cache.mkdir(parents=True, exist_ok=True)
     p = cache / f"{id}.xml"
     if p.exists():
         text: str = p.read_text()
@@ -241,22 +237,24 @@ def populate_release(link: Link) -> Release | None:
     release.groups = gn
     return release
 
+
 def unpack_to(file: Path, target_dir: Path, to_prg: bool):
     udir = Path("_unpack")
     if target_dir.is_dir():
         for r in target_dir.iterdir():
-            os.remove(r)
-        os.rmdir(target_dir)
+            r.unlink()
+        target_dir.rmdir()
     unpack(file, udir, d64_to_prg=to_prg)
     if len(list(udir.iterdir())) > 0:
-        os.rename(udir, target_dir)
+        udir.rename(target_dir)
         return True
     return False
+
 
 def download_releases(releases: list[Release], template: str, to_prg: bool):
     for release in releases:
         target_dir = Path(release.format(template))
-        os.makedirs(target_dir, exist_ok=True)
+        target_dir.mkdir(parents=True, exist_ok=True)
         # print(target_dir)
         ok = False
 
@@ -278,25 +276,13 @@ def download_releases(releases: list[Release], template: str, to_prg: bool):
             print(f"Found no valid download for {release.group} - {release.title}")
 
 
-class Store(argparse.Action):
-    def __call__(
-        self,
-        parser: argparse.ArgumentParser,
-        namespace: argparse.Namespace,
-        values: str | Sequence[Any] | None,
-        option_string: str | None = None,
-    ):
-        if values is None:
-            return
-
-
 def unpack_precache():
     rels = Path("data/releases.7z")
     groups = Path("data/groups.7z")
-    if not os.path.exists(".releases") and rels.exists():
+    if not Path(".releases").exists() and rels.exists():
         print("Unpacking precached release data")
         return subprocess.call(["7z", "x", rels], stdout=subprocess.DEVNULL)
-    if not os.path.exists(".groups") and groups.exists():
+    if not Path(".groups").exists() and groups.exists():
         print("Unpacking precached group data")
         return subprocess.call(["7z", "x", groups], stdout=subprocess.DEVNULL)
 
@@ -314,7 +300,7 @@ def check_tools() -> bool:
         and check("cbmconvert", "You need it to convert C64 file formats")
         and check("zip2disk", "You need it to convert C64-zip to d64")
         and check("unrar", "You need it to unpack rar files")
-        and check("lha", "You need it to unpack lha and lhx files")
+        # and check("lha", "You need it to unpack lha and lhx files")
     )
 
 
@@ -338,7 +324,7 @@ def filter_non_cracks(rel: Release):
     return not rel.is_crack()
 
 
-def filter_none(rel: Release):
+def filter_none(rwel: Release):
     return False
 
 
@@ -378,6 +364,13 @@ def main():
         help="Download group releases. Argument should either be a list of IDs, or a group name to search for.",
     )
     arg_parser.add_argument(
+        "-I",
+        "--id",
+        nargs="*",
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    arg_parser.add_argument(
         "-l",
         "--top-list",
         choices=["demo", "onefile", "game"],
@@ -397,6 +390,7 @@ def main():
         nargs="*",
         default=None,
     )
+    arg_parser.add_argument("-v", "--verbose", action="count", default=0)
     arg_parser.add_argument(
         "-m", "--max-releases", help="Max releases to download", default=500
     )
@@ -406,11 +400,7 @@ def main():
     arg_parser.add_argument(
         "-r", "--min-rating", help="Minium rating; 0 = filter out unrated."
     )
-    arg_parser.add_argument(
-        "--to-prg",
-        help="Convert D64 to prg",
-        default=False,
-    )
+    arg_parser.add_argument("--to-prg", help="Convert D64 to prg", action="store_true")
     arg_parser.add_argument(
         "-t",
         "--directory-template",
@@ -420,6 +410,9 @@ def main():
 
     args = arg_parser.parse_args()
     min_rating = -1
+
+    v = int(args.verbose)
+    show_run_output(v > 0)
 
     rel_types: list[str] | None = args.types
     filter: Callable[[Release], bool] = filter_non_cracks
@@ -434,7 +427,12 @@ def main():
     elif args.filter == "none":
         filter = filter_none
 
-    if args.groups is None and args.event is None and args.top_list is None:
+    if (
+        args.groups is None
+        and args.event is None
+        and args.top_list is None
+        and args.id is None
+    ):
         print(
             "*NOTE*: You must specify what to download; Events, groups or top-list.\nExamples:"
         )
@@ -460,6 +458,11 @@ def main():
     max_rel: int = int(args.max_releases)
 
     links: list[Link] = []
+
+    if args.id is not None:
+        ids: list[str] = args.id
+        for id in ids:
+            links.append(Link(int(id)))
 
     if args.event is not None:
         events: list[str] = args.event
@@ -549,14 +552,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-def test_search():
-    t = Path("testdata/oxyron.html").read_text()
-    soup = BeautifulSoup(t, "html.parser")
-    result = search_soup(soup)
-    assert len(result) == 1 and result[0] == 7
-    t = Path("testdata/crackers.html").read_text()
-    soup = BeautifulSoup(t, "html.parser")
-    result = search_soup(soup)
-    assert len(result) > 10

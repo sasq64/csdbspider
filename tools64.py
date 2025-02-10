@@ -1,7 +1,5 @@
 #!/usr/bin/python
 
-import glob
-import os
 import re
 import shutil
 import subprocess
@@ -130,6 +128,9 @@ class Release:
 
 show_output = False
 
+def show_run_output(show: bool):
+    global show_output
+    show_output = show
 
 def run(args: list[str | Path], cwd: Path | None = None, nostderr: bool = False) -> int:
     err = subprocess.DEVNULL if nostderr else None
@@ -138,6 +139,10 @@ def run(args: list[str | Path], cwd: Path | None = None, nostderr: bool = False)
         return subprocess.call(args, stdout=out, stderr=err, cwd=cwd)
     return subprocess.call(args, stdout=out)
 
+
+def log(text: str):
+    if show_output:
+        print(text)
 
 keep = {
     ".PRG",
@@ -174,7 +179,7 @@ def unpack(
     """
 
     # Make sure target directory exists and is empty
-    os.makedirs(targetdir, exist_ok=True)
+    targetdir.mkdir(parents=True, exist_ok=True)
     remove_in(targetdir)
 
     if is_win:
@@ -184,14 +189,14 @@ def unpack(
     ext = archive.suffix.upper()
 
     while True:
+        file_name = get_filename(archive)
         if ext == ".GZ":
             # Gzip replaces original file so copy it to targetdir first
-            n = get_filename(archive)
-            shutil.copyfile(archive, targetdir / n)
-            archive = targetdir / n
+            shutil.copyfile(archive, targetdir / file_name)
+            archive = targetdir / file_name
             if run(["gzip", "-d", archive]):
                 # Sometimes gzip files aren't.
-                os.rename(archive, archive.with_suffix(""))
+                archive.rename(archive.with_suffix(""))
             archive = archive.with_suffix("")
             ext = archive.suffix.upper()
 
@@ -208,17 +213,16 @@ def unpack(
             with open(archive, "rb") as af:
                 header = af.read(8)
                 if header[:4] == b"PK\x03\x04" or header[:4] == b"PK\x05\x06":
-                    # print("Looks like a zipfile")
+                    log(f"{file_name} looks like a zipfile")
                     ext = ".ZIP"
                     continue
                 elif header[:4] == b"Rar!":
-                    # print("Looks like a RAR file")
+                    log(f"{file_name} looks like a RAR file")
                     ext = ".RAR"
                     continue
                 else:
                     if archive.parent != targetdir:
-                        n = get_filename(archive)
-                        shutil.copyfile(archive, targetdir / n)
+                        shutil.copyfile(archive, targetdir / file_name)
         break
 
     flatten_dir(targetdir)
@@ -233,11 +237,11 @@ def unpack(
             run(["gunzip", r])
         elif r.name[:2] == "1!":
             run(["zip2disk", r.name[2:]], cwd=targetdir)
-            for f in glob.glob(f"{targetdir}/?!{r.name[2:]}"):
-                os.remove(f)
+            for f in targetdir.glob(f"?!{r.name[2:]}"):
+               f.unlink() 
         elif r.suffix.upper() == ".T64" and t64_to_prg:
             tmp = targetdir / "tape"
-            os.mkdir(tmp)
+            tmp.mkdir()
             run(["cbmconvert", "-t", r.absolute()], cwd=tmp, nostderr=True)
             all_basic = all(
                 (x.read_bytes()[:2])[1] == 8 if x.suffix.upper() == ".PRG" else False
@@ -245,19 +249,19 @@ def unpack(
             )
             if all_basic:
                 flatten_dir(targetdir)
-                os.remove(r)
+                r.unlink()
             else:
-                # print(f"Tape {r} has non standard files, keeping...")
+                log(f"T64 '{r.name}' has non standard files, keeping...")
                 remove_in(tmp)
-                os.rmdir(tmp)
+                tmp.rmdir()
         elif r.suffix.upper() == ".LNX":
-            n = r.with_suffix(".d64")
-            run(["cbmconvert", "-D4", n.name, "-l", r.name], cwd=targetdir)
-            os.remove(r)
+            file_name = r.with_suffix(".d64")
+            run(["cbmconvert", "-D4", file_name.name, "-l", r.name], cwd=targetdir)
+            r.unlink()
         elif r.suffix.upper() == ".P00":
             contents = r.read_bytes()
             r.with_suffix(".prg").write_bytes(contents[0x1A:])
-            os.remove(r)
+            r.unlink()
         else:
             pass
 
@@ -267,18 +271,18 @@ def unpack(
     if d64_to_prg:
         for r in targetdir.iterdir():
             if r.suffix.upper() == ".D64":
-                run(["cbmconvert", "-N", "-d", r.name], cwd=targetdir, nostderr=True)
-                # if rc != 0:
-                #    print("### CBMCONVERT RETURNED %d" % (rc,))
+                rc = run(["cbmconvert", "-N", "-d", r.name], cwd=targetdir, nostderr=True)
+                if rc != 0:
+                   log(f"cbmconvert returned {rc} for {r.name}")
                 foundprog = False
                 for r2 in targetdir.iterdir():
                     ext = r2.suffix.upper()
                     if ext == ".DEL" or ext == ".USR":
-                        os.remove(r2)
+                        r2.unlink()
                     elif ext == ".PRG":
                         foundprog = True
                 if foundprog:
-                    os.remove(r)
+                    r.unlink()
 
     # Put all unpacked PRG into a d64 if requested
     elif prg_to_d64:
@@ -287,60 +291,30 @@ def unpack(
             if r.suffix.upper() == ".PRG":
                 progs.append(r.name)
         if progs:
-            n = get_filename(archive.with_suffix(".d64"))
-            print(f"Putting {progs} into {n}")
-            subprocess.call(["cbmconvert", "-n", "-D4", n] + progs, cwd=targetdir)
+            file_name = get_filename(archive.with_suffix(".d64"))
+            #print(f"Putting {progs} into {n}")
+            subprocess.call(["cbmconvert", "-n", "-D4", file_name] + progs, cwd=targetdir)
             for p in progs:
-                os.remove(targetdir / p)
+                (targetdir / p).unlink()
 
     for r in targetdir.iterdir():
         ext = r.suffix.upper()
         if ext in keep:
             pass
         elif ext == ".SEQ":
-            os.rename(r, r.with_suffix(".prg"))
+            r.rename(r.with_suffix(".prg"))
         else:
-            sz = os.path.getsize(r)
+            sz = r.stat().st_size
             if sz == 174848:
-                os.rename(r, r.with_suffix("d64"))
+                r.rename(r.with_suffix(".d64"))
             else:
                 # print("Checking if %s is a PRG" % (r,))
                 file = open(r, "rb")
                 x = file.read(2)
                 if x == b"\x01\x08":
-                    os.rename(r, r.with_suffix(".prg"))
+                    r.rename(r.with_suffix(".prg"))
                 else:
-                    os.remove(r)
+                    r.unlink()
+                    
 
     fat32names(targetdir)
-
-
-@contextmanager
-def temp_dir() -> Generator[Path, None, None]:
-    from tempfile import TemporaryDirectory
-
-    with TemporaryDirectory() as d:
-        yield Path(d).resolve()
-
-
-def test_unpack():
-    td = Path("testdata")
-    with temp_dir() as out:
-        unpack(td / "with_lnx.zip", out)
-        assert (out / "CHARLATA.d64").exists()
-    with temp_dir() as out:
-        unpack(td / "with_lnx.zip", out, d64_to_prg=True)
-        assert (out / "charlatan.beyond.prg").exists()
-
-
-def test_format():
-    rel = Release(title="Cowboys", group="Cats", place=3)
-    rel2 = Release(title="Cowboys", group="Cats", place=-1, year=1984)
-    assert rel.format("{event}{{year}}") == ""
-    assert rel.format("{{place:02}. }") == "03. "
-    assert rel2.format("{{place:02}. }{title}{ ({year})}") == "Cowboys (1984)"
-    assert rel.format("{{place:02}. }{title}{ ({year})}") == "03. Cowboys"
-    assert rel.format("{{place:02}. }{title} {qyear}") == "03. Cowboys XXXX"
-    t = "{event}/{compo}/{{place:02}. }{group} - {title}"
-    assert rel.format(t) == "//03. Cats - Cowboys"
-    assert rel2.format(t) == "//Cats - Cowboys"

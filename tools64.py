@@ -32,6 +32,9 @@ class Release:
     group: str = ""
     groups: list[str] = field(default_factory=list)
     downloads: list[str] = field(default_factory=list)
+    coder: str = ""
+    artist: str = ""
+    composer: str = ""
     event: str = ""
     place: int = 0
     compo: str = ""
@@ -205,6 +208,8 @@ def unpack(
             run(["7z", "e", archive, "-y", f"-o{targetdir}"])
         elif ext == ".RAR":
             run(["unrar", "e", "-o-", "-y", archive.absolute()], cwd=targetdir)
+        elif ext == ".TGZ":
+            run(["tar", "-xzf", archive.absolute()], cwd=targetdir)
         elif ext == ".TAR":
             run(["tar", "-xf", archive.absolute()], cwd=targetdir)
         elif ext == ".LHA" or ext == ".LZH":

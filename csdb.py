@@ -226,6 +226,18 @@ def populate_release(link: Link) -> Release | None:
     if len(groups) == 0:
         groups = tree.findall(".//ReleasedBy/Handle/Handle")
 
+    credits = tree.findall("./Release/Credits")
+    for credit in credits:
+        credit_type = get_text(credit.find("./CreditType"))
+        handle = get_text(credit.find("./Handle"))
+        if release.composer == "" and credit_type == "Music":
+            release.composer = handle
+        elif release.coder == "" and credit_type == "Code":
+            release.coder = handle
+        if release.coder == "" and credit_type == "Graphics":
+            release.artist = handle
+
+
     r = tree.find("./Release/Rating")
     release.rating = get_float(r)
     y = tree.find("./Release/ReleaseYear")

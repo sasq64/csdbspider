@@ -6,6 +6,7 @@ from typing import Generator
 import urllib.request
 import urllib.parse
 import urllib.error
+import re
 
 
 @contextmanager
@@ -56,6 +57,48 @@ def fat32names(dirname: Path):
             fat32names(f)
 
 
+def collect(root_dir: Path, min_files: int = 5):
+    prefixes: dict[str, list[Path]] = {}
+    for f in root_dir.iterdir():
+        base = f.with_suffix("").name
+        base = base.replace("(es)", "").replace("(AGA)", "")
+        m = re.match(r"(\D+)(\d+).*\(([^)]+)\)", base)
+        if m:
+            pre = m.group(1)
+            while pre[-1] == " " or pre[-1] == "#" or pre[-1] == "(" or pre[-1] == "-":
+                pre = pre[:-1]
+            pre = pre.replace("Vol.", "").replace(
+                "Issue", "").replace("Nr.", "")
+            while pre[-1] == " " or pre[-1] == "#" or pre[-1] == "(" or pre[-1] == "-":
+                pre = pre[:-1]
+            pre = f"{pre} ({m.group(3)})"
+            if pre in prefixes:
+                prefixes[pre].append(f)
+            else:
+                prefixes[pre] = [f]
+    for pre, l in prefixes.items():
+        if len(l) >= min_files:
+            print(pre)
+            p = Path("target") / pre
+            p.mkdir(parents=True, exist_ok=True)
+            for n in l:
+                print(f"    {n}")
+                n.rename(p / n.name)
+
+
+def alpha_subdir(root_dir: Path):
+    """Iterate over every file or dir in root_dir, take its first letter, and move it
+     into a subdirectory named that letter"""
+    for f in root_dir.iterdir():
+        if len(f.name) == 1:
+            continue
+        if f.name[0] == '-':
+            continue
+        sub = root_dir / f.name[0]
+        sub.mkdir(exist_ok=True)
+        f.rename(sub / f.name)
+
+
 def reorganize(root_dir: Path, max_files: int, min_files: int = -1):
     """
     Reorganize a set of "alphabetic" subdirectories so that no directory
@@ -92,6 +135,7 @@ def reorganize(root_dir: Path, max_files: int, min_files: int = -1):
                 small_count = 0
                 small_dirs = []
 
+            count = ""
             if len(files) > max_files:
                 while len(files) > 0:
                     target = Path(f"{f}{i}")
@@ -102,9 +146,9 @@ def reorganize(root_dir: Path, max_files: int, min_files: int = -1):
                     files = files[max_files:]
                     i += 1
                 f.rmdir()
-            elif count < min_files:
+            elif len(files) < min_files:
                 small_dirs.append(f)
-                small_count += count
+                small_count += len(files)
 
     if len(small_dirs) > 1:
         t = ""
@@ -176,3 +220,21 @@ def flatten_dir(path: Path):
         if r.is_dir():
             flatten_dir2(r, path)
             r.rmdir()
+
+
+def apply_template(template: str, d: dict[str, str | int | float]):
+        # Support nested curlies; if nested variable is empty or negative,
+        # the outer scope is removed.
+        r = re.compile(r"{[^{}]*({[^{}]+})[^{}]*}")
+        while True:
+            m = r.search(template)
+            if not m:
+                break
+            s0, e0 = m.start(0), m.end(0)
+            s1, e1 = m.start(1), m.end(1)
+            x = template[s1:e1].format(**d)
+            if x == "-1" or x == "":
+                template = template[:s0] + template[e0:]
+            else:
+                template = template[:s0] + template[s0 + 1 : e0 - 1] + template[e0:]
+        return template.format(**d)

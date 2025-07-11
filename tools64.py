@@ -5,12 +5,10 @@ import shutil
 import subprocess
 import urllib
 import urllib.parse
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generator
 
-from utils import dospath, fat32names, fixname, flatten_dir, remove_in
+from utils import dospath, fat32names, fixname, flatten_dir, remove_in, apply_template
 
 is_win = False
 
@@ -111,22 +109,7 @@ class Release:
         d["i"] = self.title[0]
         d["a"] = fixname(self.title[0])
         d["qyear"] = "XXXX" if self.year == -1 else self.year
-
-        # Support nested curlies; if nested variable is empty or negative,
-        # the outer scope is removed.
-        r = re.compile(r"{[^{}]*({[^{}]+})[^{}]*}")
-        while True:
-            m = r.search(template)
-            if not m:
-                break
-            s0, e0 = m.start(0), m.end(0)
-            s1, e1 = m.start(1), m.end(1)
-            x = template[s1:e1].format(**d)
-            if x == "-1" or x == "":
-                template = template[:s0] + template[e0:]
-            else:
-                template = template[:s0] + template[s0 + 1 : e0 - 1] + template[e0:]
-        return template.format(**d)
+        return apply_template(template, d)
 
 
 show_output = False

@@ -58,6 +58,10 @@ def fat32names(dirname: Path):
 
 
 def collect(root_dir: Path, min_files: int = 5):
+    """
+    Group files that form logic sets (like disk mags or pack disks) by extracting
+    a common name, and moving the individual issues into a sub directory of that name.
+    """
     prefixes: dict[str, list[Path]] = {}
     for f in root_dir.iterdir():
         base = f.with_suffix("").name
@@ -67,8 +71,7 @@ def collect(root_dir: Path, min_files: int = 5):
             pre = m.group(1)
             while pre[-1] == " " or pre[-1] == "#" or pre[-1] == "(" or pre[-1] == "-":
                 pre = pre[:-1]
-            pre = pre.replace("Vol.", "").replace(
-                "Issue", "").replace("Nr.", "")
+            pre = pre.replace("Vol.", "").replace("Issue", "").replace("Nr.", "")
             while pre[-1] == " " or pre[-1] == "#" or pre[-1] == "(" or pre[-1] == "-":
                 pre = pre[:-1]
             pre = f"{pre} ({m.group(3)})"
@@ -88,11 +91,11 @@ def collect(root_dir: Path, min_files: int = 5):
 
 def alpha_subdir(root_dir: Path):
     """Iterate over every file or dir in root_dir, take its first letter, and move it
-     into a subdirectory named that letter"""
+    into a subdirectory named that letter"""
     for f in root_dir.iterdir():
         if len(f.name) == 1:
             continue
-        if f.name[0] == '-':
+        if f.name[0] == "-":
             continue
         sub = root_dir / f.name[0]
         sub.mkdir(exist_ok=True)
@@ -223,18 +226,18 @@ def flatten_dir(path: Path):
 
 
 def apply_template(template: str, d: dict[str, str | int | float]):
-        # Support nested curlies; if nested variable is empty or negative,
-        # the outer scope is removed.
-        r = re.compile(r"{[^{}]*({[^{}]+})[^{}]*}")
-        while True:
-            m = r.search(template)
-            if not m:
-                break
-            s0, e0 = m.start(0), m.end(0)
-            s1, e1 = m.start(1), m.end(1)
-            x = template[s1:e1].format(**d)
-            if x == "-1" or x == "":
-                template = template[:s0] + template[e0:]
-            else:
-                template = template[:s0] + template[s0 + 1 : e0 - 1] + template[e0:]
-        return template.format(**d)
+    # Support nested curlies; if nested variable is empty or negative,
+    # the outer scope is removed.
+    r = re.compile(r"{[^{}]*({[^{}]+})[^{}]*}")
+    while True:
+        m = r.search(template)
+        if not m:
+            break
+        s0, e0 = m.start(0), m.end(0)
+        s1, e1 = m.start(1), m.end(1)
+        x = template[s1:e1].format(**d)
+        if x == "-1" or x == "":
+            template = template[:s0] + template[e0:]
+        else:
+            template = template[:s0] + template[s0 + 1 : e0 - 1] + template[e0:]
+    return template.format(**d)

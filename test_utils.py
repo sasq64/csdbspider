@@ -1,4 +1,4 @@
-from utils import flatten_dir, remove_in, temp_dir, collect, alpha_subdir
+from utils import flatten_dir, remove_in, temp_dir, collect, alpha_subdir, reorganize
 
 def test_flatten_dir():
     with temp_dir() as p:
@@ -99,4 +99,80 @@ def test_alpha_subdir():
         # Check that original files are gone
         assert not (p / "Apple.txt").exists()
         assert not (p / "Banana.txt").exists()
+
+
+def test_reorganize():
+    """Test reorganize function for balancing directory sizes"""
+    with temp_dir() as p:
+        p.mkdir(exist_ok=True)
+        remove_in(p)
+        
+        # Create directories with different file counts
+        
+        # Directory A with too many files (exceeds max_files=5)
+        (p / "A").mkdir()
+        for i in range(8):
+            (p / "A" / f"file{i:02d}.txt").write_text(f"content{i}")
+        
+        # Directory B with normal amount of files
+        (p / "B").mkdir()
+        for i in range(3):
+            (p / "B" / f"file{i:02d}.txt").write_text(f"content{i}")
+        
+        # Directory C with too few files (below min_files=2)
+        (p / "C").mkdir()
+        (p / "C" / "fileC.txt").write_text("content_c")
+        
+        # Directory D with too few files (below min_files=2)
+        (p / "D").mkdir()
+        (p / "D" / "fileD.txt").write_text("content_d")
+        
+        # Test reorganize with max_files=5, min_files=2
+        reorganize(p, max_files=5, min_files=2)
+        
+        # Check that directory A was split into multiple directories
+        assert (p / "A0").is_dir()
+        assert (p / "A1").is_dir()
+        assert not (p / "A").exists()  # Original A should be removed
+        
+        # Check file distribution in split directories
+        a0_files = list((p / "A0").iterdir())
+        a1_files = list((p / "A1").iterdir())
+        assert len(a0_files) <= 5
+        assert len(a1_files) <= 5
+        assert len(a0_files) + len(a1_files) == 8  # Total files preserved
+        
+        # Check that B directory remained unchanged (within limits)
+        assert (p / "B").is_dir()
+        assert len(list((p / "B").iterdir())) == 3
+        
+        # Check that C and D were merged into CD (both had too few files)
+        # Note: The function processes directories in alphabetical order and merges
+        # small directories at the end if there are multiple
+        assert (p / "CD").is_dir()
+        assert not (p / "C").exists()
+        assert not (p / "D").exists()
+        cd_files = list((p / "CD").iterdir())
+        # Should have files from both C and D
+        assert len(cd_files) == 2  # Both fileC.txt and fileD.txt
+        file_names = {f.name for f in cd_files}
+        assert "fileC.txt" in file_names
+        assert "fileD.txt" in file_names
+
+
+def test_reorganize_edge_cases():
+    """Test reorganize function edge cases"""
+    with temp_dir() as p:
+        p.mkdir(exist_ok=True)
+        remove_in(p)
+        
+        # Test with single small directory (should remain unchanged)
+        (p / "A").mkdir()
+        (p / "A" / "file1.txt").write_text("content1")
+        
+        reorganize(p, max_files=10, min_files=5)
+        
+        # Single small directory should remain as is
+        assert (p / "A").is_dir()
+        assert len(list((p / "A").iterdir())) == 1
 

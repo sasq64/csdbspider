@@ -129,9 +129,7 @@ def get_csdb_xml(what: str, id: int, depth: int = 2):
     cache = Path(f".{what}s")
     cache.mkdir(parents=True, exist_ok=True)
     p = cache / f"{id}.xml"
-    if p.exists():
-        text: str = p.read_text()
-    else:
+    if not p.exists():
         url = rf"https://csdb.dk/webservice/?type={what}&id={id}&depth={depth}"
         try:
             data: bytes = urllib.request.urlopen(url).read()
@@ -139,10 +137,8 @@ def get_csdb_xml(what: str, id: int, depth: int = 2):
             sys.exit(f"Illegal URL: {url}")
         except (urllib.error.HTTPError, urllib.error.URLError):
             sys.exit(f"Network error for {url}")
-        text: str = data.decode("utf-8")
-        p.write_text(text)
-    tree = ET.fromstring(text)
-    return tree
+        p.write_text(data.decode("utf-8"))
+    return ET.fromstring(p.read_text())
 
 
 def get_text(elem: ET.Element | None, default: str = "") -> str:
@@ -237,7 +233,6 @@ def populate_release(link: Link) -> Release | None:
         if release.coder == "" and credit_type == "Graphics":
             release.artist = handle
 
-
     r = tree.find("./Release/Rating")
     release.rating = get_float(r)
     y = tree.find("./Release/ReleaseYear")
@@ -320,7 +315,7 @@ def log(txt: str):
     print(txt)
 
 
-def filter_all(rel: Release):
+def filter_all(_: Release):
     return True
 
 
@@ -336,7 +331,7 @@ def filter_non_cracks(rel: Release):
     return not rel.is_crack()
 
 
-def filter_none(rwel: Release):
+def filter_none(_: Release):
     return False
 
 
@@ -421,7 +416,7 @@ def main():
     )
 
     args = arg_parser.parse_args()
-    min_rating = -1
+    min_rating = args.min_rating or -1
 
     v = int(args.verbose)
     show_run_output(v > 0)

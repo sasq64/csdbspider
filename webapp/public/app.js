@@ -1,6 +1,33 @@
+/**
+ * @typedef {Object} JobProgress
+ * @property {number} percent - Progress percentage (0-100)
+ * @property {string} current - Current status message
+ * @property {number} total - Total number of releases
+ * @property {number} completed - Number of completed releases
+ */
+
+/**
+ * @typedef {Object} WebSocketMessage
+ * @property {'progress'|'complete'|'error'} type - Message type
+ * @property {string} jobId - Job identifier
+ * @property {JobProgress} [data] - Progress data (for progress messages)
+ * @property {string} [downloadPath] - Download path (for complete messages)
+ * @property {string} [error] - Error message (for error messages)
+ */
+
+/**
+ * @typedef {Object} FormData
+ * @property {'toplist'|'party'|'group'} downloadType - Type of download
+ * @property {string} [partyName] - Party name (for party downloads)
+ * @property {string} [groupName] - Group name (for group downloads)
+ * @property {number} maxReleases - Maximum number of releases
+ */
+
 class CSDbSpiderApp {
     constructor() {
+        /** @type {string|null} */
         this.currentJobId = null;
+        /** @type {WebSocket|null} */
         this.websocket = null;
         this.initializeElements();
         this.attachEventListeners();
@@ -73,6 +100,10 @@ class CSDbSpiderApp {
         };
     }
 
+    /**
+     * Handle incoming WebSocket messages
+     * @param {WebSocketMessage} message - The message from the server
+     */
     handleWebSocketMessage(message) {
         console.log('[Frontend] Received WebSocket message:', message);
         
@@ -209,6 +240,10 @@ class CSDbSpiderApp {
         });
     }
 
+    /**
+     * Update the progress display
+     * @param {JobProgress} data - Progress data from the server
+     */
     updateProgress(data) {
         console.log('[Frontend] Updating progress:', data);
         this.progressFill.style.width = `${data.percent}%`;

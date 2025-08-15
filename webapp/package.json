@@ -4,17 +4,42 @@
   "description": "Web interface for CSDbSpider C64 archive tool",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node server.ts",
+    "dev:watch": "ts-node --watch server.ts",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "JEST_VERBOSE=1 jest --verbose"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "ws": "^8.14.2",
     "archiver": "^6.0.1",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
     "uuid": "^9.0.1",
-    "multer": "^1.4.5-lts.1"
+    "ws": "^8.14.2"
   },
-  "keywords": ["c64", "archive", "csdb", "webapp"],
+  "keywords": [
+    "c64",
+    "archive",
+    "csdb",
+    "webapp"
+  ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.3.0",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "jest": "^30.0.5",
+    "ts-jest": "^29.4.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
 }

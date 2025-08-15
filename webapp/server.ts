@@ -1,8 +1,36 @@
-const express = require('express');
-const WebSocket = require('ws');
-const http = require('http');
-const path = require('path');
-const JobManager = require('./jobs');
+import express from 'express';
+import WebSocket from 'ws';
+import http from 'http';
+import JobManager from './jobs';
+
+interface JobParams {
+  downloadType: 'toplist' | 'party' | 'group';
+  partyName?: string | undefined;
+  groupName?: string | undefined;
+  maxReleases: number;
+}
+
+interface GenerateRequest {
+  downloadType: 'toplist' | 'party' | 'group';
+  partyName?: string;
+  groupName?: string;
+  maxReleases: string | number;
+}
+
+interface Job {
+  id: string;
+  status: 'running' | 'completed' | 'error';
+  progress: {
+    percent: number;
+    current: string;
+    total: number;
+    completed: number;
+  };
+  error: string | null;
+  downloadPath: string | null;
+  params: JobParams;
+  workDir: string;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -20,7 +48,7 @@ wss.on('connection', (ws) => {
     });
 });
 
-function broadcastProgress(jobId, data) {
+function broadcastProgress(jobId: string, data: Job['progress']): void {
     console.log(`[Server] Broadcasting progress for job ${jobId}:`, data);
     const message = JSON.stringify({
         type: 'progress',
@@ -38,7 +66,7 @@ function broadcastProgress(jobId, data) {
     console.log(`[Server] Sent progress to ${clientCount} clients`);
 }
 
-function broadcastJobComplete(jobId, downloadPath) {
+function broadcastJobComplete(jobId: string, downloadPath: string): void {
     console.log(`[Server] Broadcasting completion for job ${jobId}:`, downloadPath);
     const message = JSON.stringify({
         type: 'complete',
@@ -56,7 +84,7 @@ function broadcastJobComplete(jobId, downloadPath) {
     console.log(`[Server] Sent completion to ${clientCount} clients`);
 }
 
-function broadcastJobError(jobId, error) {
+function broadcastJobError(jobId: string, error: string): void {
     console.log(`[Server] Broadcasting error for job ${jobId}:`, error);
     const message = JSON.stringify({
         type: 'error',
@@ -78,7 +106,7 @@ jobManager.on('progress', broadcastProgress);
 jobManager.on('complete', broadcastJobComplete);
 jobManager.on('error', broadcastJobError);
 
-app.post('/api/generate', (req, res) => {
+app.post('/api/generate', (req: express.Request<{}, {}, GenerateRequest>, res: express.Response) => {
     const { downloadType, partyName, groupName, maxReleases } = req.body;
     
     if (!downloadType || !maxReleases) {
@@ -95,21 +123,21 @@ app.post('/api/generate', (req, res) => {
     
     const jobId = jobManager.startJob({
         downloadType,
-        partyName,
-        groupName,
-        maxReleases: parseInt(maxReleases)
+        partyName: partyName || undefined,
+        groupName: groupName || undefined,
+        maxReleases: typeof maxReleases === 'string' ? parseInt(maxReleases) : maxReleases
     });
     
-    res.json({ jobId, status: 'started' });
+    return res.json({ jobId, status: 'started' });
 });
 
-app.get('/api/status/:jobId', (req, res) => {
+app.get('/api/status/:jobId', (req: express.Request<{jobId: string}>, res: express.Response) => {
     const job = jobManager.getJob(req.params.jobId);
     if (!job) {
         return res.status(404).json({ error: 'Job not found' });
     }
     
-    res.json({
+    return res.json({
         jobId: req.params.jobId,
         status: job.status,
         progress: job.progress,
@@ -117,14 +145,14 @@ app.get('/api/status/:jobId', (req, res) => {
     });
 });
 
-app.get('/download/:jobId', (req, res) => {
+app.get('/download/:jobId', (req: express.Request<{jobId: string}>, res: express.Response) => {
     const job = jobManager.getJob(req.params.jobId);
     if (!job || job.status !== 'completed') {
         return res.status(404).json({ error: 'Job not found or not completed' });
     }
     
     const filename = `csdb-archive-${req.params.jobId}.zip`;
-    res.download(job.downloadPath, filename, (err) => {
+    return res.download(job.downloadPath!, filename, (err) => {
         if (err) {
             console.error('Download error:', err);
         }

@@ -56,8 +56,7 @@ class CSDbSpiderApp {
         this.groupNameInput = document.getElementById('groupName');
         this.partyDropdown = document.getElementById('partyDropdown');
         this.groupDropdown = document.getElementById('groupDropdown');
-        this.maxReleasesSlider = document.getElementById('maxReleases');
-        this.sliderValue = document.querySelector('.slider-value');
+        this.maxReleasesSelect = document.getElementById('maxReleases');
         this.generateBtn = document.getElementById('generateBtn');
         
         this.progressSection = document.getElementById('progressSection');
@@ -78,12 +77,9 @@ class CSDbSpiderApp {
     attachEventListeners() {
         this.form.addEventListener('submit', (e) => this.handleSubmit(e));
         this.downloadTypeSelect.addEventListener('change', () => this.handleTypeChange());
-        this.maxReleasesSlider.addEventListener('input', () => this.updateSliderValue());
         this.downloadBtn.addEventListener('click', () => this.handleDownload());
         this.newJobBtn.addEventListener('click', () => this.resetForm());
         this.retryBtn.addEventListener('click', () => this.resetForm());
-        
-        this.updateSliderValue();
     }
 
     connectWebSocket() {
@@ -161,9 +157,6 @@ class CSDbSpiderApp {
         }
     }
 
-    updateSliderValue() {
-        this.sliderValue.textContent = this.maxReleasesSlider.value;
-    }
 
     async handleSubmit(e) {
         e.preventDefault();
@@ -180,7 +173,7 @@ class CSDbSpiderApp {
             groupName: this.groupNameInput.value,
             partyId: this.selectedPartyId,
             groupId: this.selectedGroupId,
-            maxReleases: parseInt(this.maxReleasesSlider.value)
+            maxReleases: parseInt(this.maxReleasesSelect.value)
         };
         
         console.log('[Frontend] Submitting form data:', formData);
@@ -343,7 +336,6 @@ class CSDbSpiderApp {
         this.selectedGroupId = null;
         
         this.form.reset();
-        this.updateSliderValue();
         this.handleTypeChange();
         this.hideAllDropdowns();
     }

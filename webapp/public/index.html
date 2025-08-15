@@ -48,11 +48,14 @@
 
                     <div class="form-group">
                         <label for="maxReleases">Maximum Releases:</label>
-                        <div class="slider-container">
-                            <input type="range" id="maxReleases" name="maxReleases"
-                                   min="1" max="100" value="25" class="slider">
-                            <span class="slider-value">25</span>
-                        </div>
+                        <select id="maxReleases" name="maxReleases" class="form-select">
+                            <option value="10">10</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="250">250</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                        </select>
                         <small>Number of releases to include in the archive</small>
                     </div>
                 </div>

@@ -123,7 +123,14 @@ class JobManager extends EventEmitter {
                 break;
         }
 
-        args.push('-t', `${job.workDir}/{rank:03}. {group} - {title}{ ({year})}`);
+        // Template patterns for different download types - edit these as needed
+        const templates = {
+            toplist: `${job.workDir}/{rank:03}. {group} - {title}{ ({year})}`,
+            party: `${job.workDir}/{event}/{compo}/{{place:02}. }{group} - {title}`,
+            group: `${job.workDir}/{group}/{qyear} - {title} [{type}]`,
+        };
+
+        args.push('-t', templates[downloadType]);
 
         console.log(`[Job ${job.id}] Starting CSDb with command: python3 ${args.join(' ')}`);
         console.log(`[Job ${job.id}] Working directory: ${job.workDir}`);

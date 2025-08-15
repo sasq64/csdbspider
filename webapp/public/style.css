@@ -579,3 +579,144 @@ footer small {
 .autocomplete-dropdown::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 255, 0, 0.7);
 }
+
+/* Archives Section */
+.archives-section {
+    background: rgba(0, 255, 0, 0.05);
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 32px 0;
+    animation: glow 2s ease-in-out infinite alternate;
+}
+
+.archives-section h2 {
+    color: #00ff00;
+    text-align: center;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.archives-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.loading-message {
+    text-align: center;
+    color: rgba(0, 255, 0, 0.7);
+    font-style: italic;
+    padding: 20px;
+}
+
+.no-archives-message {
+    text-align: center;
+    color: rgba(0, 255, 0, 0.7);
+    font-style: italic;
+    padding: 20px;
+}
+
+.archive-item {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 255, 0, 0.2);
+    border-radius: 6px;
+    padding: 16px;
+    transition: all 0.3s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.archive-item:hover {
+    border-color: rgba(0, 255, 0, 0.5);
+    background: rgba(0, 255, 0, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 255, 0, 0.2);
+}
+
+.archive-info {
+    flex: 1;
+    min-width: 300px;
+}
+
+.archive-title {
+    color: #00ff00;
+    font-weight: bold;
+    margin-bottom: 4px;
+    font-size: 1.1em;
+}
+
+.archive-meta {
+    color: rgba(0, 255, 0, 0.7);
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.archive-meta .meta-item {
+    margin-right: 16px;
+    display: inline-block;
+}
+
+.archive-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.archive-download-btn {
+    background: linear-gradient(45deg, #003300, #006600);
+    color: #00ff00;
+    border: 1px solid rgba(0, 255, 0, 0.4);
+    border-radius: 4px;
+    padding: 8px 16px;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: inherit;
+    font-size: 0.9em;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.archive-download-btn:hover {
+    background: linear-gradient(45deg, #004400, #008800);
+    border-color: rgba(0, 255, 0, 0.6);
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+    transform: translateY(-1px);
+}
+
+.archive-download-btn:active {
+    transform: translateY(0);
+}
+
+.archive-size {
+    color: rgba(0, 255, 0, 0.6);
+    font-size: 0.85em;
+    white-space: nowrap;
+}
+
+/* Responsive design for archives */
+@media (max-width: 600px) {
+    .archive-item {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+    }
+    
+    .archive-info {
+        min-width: auto;
+    }
+    
+    .archive-actions {
+        justify-content: center;
+        margin-top: 8px;
+    }
+    
+    .archive-meta .meta-item {
+        display: block;
+        margin-right: 0;
+        margin-bottom: 4px;
+    }
+}

@@ -3,6 +3,7 @@ import WebSocket from 'ws';
 import http from 'http';
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import JobManager from './jobs';
 
 /**
@@ -302,6 +303,30 @@ app.get('/api/autocomplete/events', (req: express.Request, res: express.Response
     .slice(0, 20); // Limit to 20 results
   
   return res.json(filteredEvents);
+});
+
+// Archive management endpoints
+app.get('/api/archives', (_req: express.Request, res: express.Response) => {
+  const archives = jobManager.getArchiveHistory();
+  return res.json(archives);
+});
+
+app.get('/download/archive/:filename', (req: express.Request<{filename: string}>, res: express.Response) => {
+  const filename = req.params.filename;
+  const archivePath = path.join(__dirname, 'archives', filename);
+  
+  if (!fs.existsSync(archivePath)) {
+    return res.status(404).json({ error: 'Archive not found' });
+  }
+  
+  // Increment download count
+  jobManager.incrementDownloadCount(filename);
+  
+  return res.download(archivePath, filename, (err) => {
+    if (err) {
+      console.error('Archive download error:', err);
+    }
+  });
 });
 
 app.get('/download/:jobId', (req: express.Request<{jobId: string}>, res: express.Response) => {

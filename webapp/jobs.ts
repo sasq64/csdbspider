@@ -42,6 +42,27 @@ interface Job {
 }
 
 /**
+ * Persistent archive metadata for stored archives.
+ * Used to track archive history and provide download information.
+ */
+interface ArchiveMetadata {
+    filename: string;
+    createdAt: string;
+    downloadType: 'toplist' | 'party' | 'group';
+    params: JobParams;
+    fileSize: number;
+    downloadCount: number;
+}
+
+/**
+ * Archive history structure stored in history.json.
+ * Maintains list of up to 10 most recent archives.
+ */
+interface ArchiveHistory {
+    archives: ArchiveMetadata[];
+}
+
+/**
  * Manages CSDb archive generation jobs, handling job lifecycle from creation to completion.
  * Spawns csdb.py processes, tracks progress, creates ZIP archives, and emits real-time updates.
  * Extends EventEmitter to broadcast progress, completion, and error events to connected clients.
@@ -49,6 +70,8 @@ interface Job {
 class JobManager extends EventEmitter {
     private jobs: Map<string, Job>;
     private tempDir: string;
+    private archivesDir: string;
+    private historyFile: string;
 
     /**
      * Initializes the job manager and creates the temporary directory for job files.
@@ -57,9 +80,15 @@ class JobManager extends EventEmitter {
         super();
         this.jobs = new Map<string, Job>();
         this.tempDir = path.join(__dirname, 'temp');
+        this.archivesDir = path.join(__dirname, 'archives');
+        this.historyFile = path.join(this.archivesDir, 'history.json');
 
         if (!fs.existsSync(this.tempDir)) {
             fs.mkdirSync(this.tempDir, { recursive: true });
+        }
+
+        if (!fs.existsSync(this.archivesDir)) {
+            fs.mkdirSync(this.archivesDir, { recursive: true });
         }
     }
 
@@ -265,6 +294,9 @@ class JobManager extends EventEmitter {
             job.progress.percent = 100;
             job.progress.current = 'Archive ready for download';
 
+            console.log(`[Job ${job.id}] Saving archive to permanent storage`);
+            this.saveArchivePermanently(job, archivePath, archive.pointer());
+
             console.log(`[Job ${job.id}] Emitting progress and complete events`);
             this.emit('progress', job.id, job.progress);
             this.emit('complete', job.id, archivePath);
@@ -301,6 +333,133 @@ class JobManager extends EventEmitter {
      */
     getJob(jobId: string): Job | undefined {
         return this.jobs.get(jobId);
+    }
+
+    /**
+     * Saves an archive permanently to the archives directory and updates history.
+     * Creates a timestamped filename and maintains the 10 most recent archives.
+     * @param job - The completed job object
+     * @param tempArchivePath - Path to the temporary archive file
+     * @param fileSize - Size of the archive in bytes
+     */
+    private saveArchivePermanently(job: Job, tempArchivePath: string, fileSize: number): void {
+        try {
+            const timestamp = new Date().toISOString().replace(/[:]/g, '-').split('.')[0];
+            let archiveParam = '';
+            
+            switch (job.params.downloadType) {
+                case 'toplist':
+                    archiveParam = 'toplist';
+                    break;
+                case 'party':
+                    archiveParam = job.params.partyName || job.params.partyId?.toString() || 'unknown-party';
+                    break;
+                case 'group':
+                    archiveParam = job.params.groupName || job.params.groupId?.toString() || 'unknown-group';
+                    break;
+            }
+
+            const filename = `${timestamp}-${job.params.downloadType}-${archiveParam}-${job.params.maxReleases}.zip`
+                .replace(/[^\w\-_.]/g, '-');
+            const permanentPath = path.join(this.archivesDir, filename);
+
+            fs.copyFileSync(tempArchivePath, permanentPath);
+            console.log(`[Job ${job.id}] Archive saved as: ${filename}`);
+
+            const metadata: ArchiveMetadata = {
+                filename,
+                createdAt: new Date().toISOString(),
+                downloadType: job.params.downloadType,
+                params: job.params,
+                fileSize,
+                downloadCount: 0
+            };
+
+            this.updateArchiveHistory(metadata);
+
+        } catch (error) {
+            console.error(`[Job ${job.id}] Failed to save archive permanently:`, error);
+        }
+    }
+
+    /**
+     * Updates the archive history file with new metadata and maintains the 10 archive limit.
+     * @param newMetadata - Metadata for the new archive
+     */
+    private updateArchiveHistory(newMetadata: ArchiveMetadata): void {
+        try {
+            let history: ArchiveHistory = { archives: [] };
+
+            if (fs.existsSync(this.historyFile)) {
+                const data = fs.readFileSync(this.historyFile, 'utf8');
+                history = JSON.parse(data);
+            }
+
+            history.archives.unshift(newMetadata);
+
+            if (history.archives.length > 10) {
+                const oldArchives = history.archives.slice(10);
+                for (const oldArchive of oldArchives) {
+                    const oldPath = path.join(this.archivesDir, oldArchive.filename);
+                    if (fs.existsSync(oldPath)) {
+                        fs.unlinkSync(oldPath);
+                        console.log(`Deleted old archive: ${oldArchive.filename}`);
+                    }
+                }
+                history.archives = history.archives.slice(0, 10);
+            }
+
+            fs.writeFileSync(this.historyFile, JSON.stringify(history, null, 2));
+            console.log(`Updated archive history with ${newMetadata.filename}`);
+
+        } catch (error) {
+            console.error('Failed to update archive history:', error);
+        }
+    }
+
+    /**
+     * Retrieves the list of archived files with metadata.
+     * @returns Array of archive metadata objects
+     */
+    getArchiveHistory(): ArchiveMetadata[] {
+        try {
+            if (!fs.existsSync(this.historyFile)) {
+                return [];
+            }
+
+            const data = fs.readFileSync(this.historyFile, 'utf8');
+            const history: ArchiveHistory = JSON.parse(data);
+            return history.archives;
+
+        } catch (error) {
+            console.error('Failed to read archive history:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Increments the download count for a specific archive.
+     * @param filename - Name of the archive file
+     */
+    incrementDownloadCount(filename: string): void {
+        try {
+            if (!fs.existsSync(this.historyFile)) {
+                return;
+            }
+
+            const data = fs.readFileSync(this.historyFile, 'utf8');
+            const history: ArchiveHistory = JSON.parse(data);
+            
+            const archive = history.archives.find(a => a.filename === filename);
+            if (archive) {
+                archive.downloadCount++;
+                fs.writeFileSync(this.historyFile, JSON.stringify(history, null, 2));
+                console.log(`Incremented download count for ${filename} to ${archive.downloadCount}`);
+            }
+
+        } catch (error) {
+            console.error('Failed to increment download count:', error);
+        }
     }
 
     /**

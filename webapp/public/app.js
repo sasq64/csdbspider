@@ -45,6 +45,7 @@ class CSDbSpiderApp {
         this.attachEventListeners();
         this.connectWebSocket();
         this.initializeAutocomplete();
+        this.loadArchiveHistory();
     }
 
     initializeElements() {
@@ -72,6 +73,9 @@ class CSDbSpiderApp {
         this.errorSection = document.getElementById('errorSection');
         this.errorMessage = document.getElementById('errorMessage');
         this.retryBtn = document.getElementById('retryBtn');
+
+        this.archivesSection = document.getElementById('archivesSection');
+        this.archivesList = document.getElementById('archivesList');
     }
 
     attachEventListeners() {
@@ -86,28 +90,30 @@ class CSDbSpiderApp {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}`;
         
+        console.log('[Frontend] Connecting to WebSocket at:', wsUrl);
         this.websocket = new WebSocket(wsUrl);
         
         this.websocket.onopen = () => {
-            console.log('WebSocket connected');
+            console.log('[Frontend] WebSocket connected successfully');
         };
         
         this.websocket.onmessage = (event) => {
+            console.log('[Frontend] Raw WebSocket message received:', event.data);
             try {
                 const message = JSON.parse(event.data);
                 this.handleWebSocketMessage(message);
             } catch (error) {
-                console.error('Failed to parse WebSocket message:', error);
+                console.error('[Frontend] Failed to parse WebSocket message:', error, 'Raw data:', event.data);
             }
         };
         
-        this.websocket.onclose = () => {
-            console.log('WebSocket disconnected');
+        this.websocket.onclose = (event) => {
+            console.log('[Frontend] WebSocket disconnected. Code:', event.code, 'Reason:', event.reason);
             setTimeout(() => this.connectWebSocket(), 3000);
         };
         
         this.websocket.onerror = (error) => {
-            console.error('WebSocket error:', error);
+            console.error('[Frontend] WebSocket error:', error);
         };
     }
 
@@ -117,11 +123,16 @@ class CSDbSpiderApp {
      */
     handleWebSocketMessage(message) {
         console.log('[Frontend] Received WebSocket message:', message);
+        console.log('[Frontend] Current job ID:', this.currentJobId);
+        console.log('[Frontend] Message job ID:', message.jobId);
+        console.log('[Frontend] Job IDs match:', message.jobId === this.currentJobId);
         
         if (message.jobId !== this.currentJobId) {
-            console.log(`[Frontend] Ignoring message for different job: ${message.jobId} vs ${this.currentJobId}`);
+            console.warn(`[Frontend] Ignoring message for different job: received=${message.jobId} vs current=${this.currentJobId}`);
             return;
         }
+
+        console.log(`[Frontend] Processing ${message.type} message for job ${message.jobId}`);
 
         switch (message.type) {
             case 'progress':
@@ -282,6 +293,11 @@ class CSDbSpiderApp {
             console.log('[Frontend] Download button clicked');
             this.triggerDownload();
         };
+
+        // Reload archive history to show the new archive
+        setTimeout(() => {
+            this.loadArchiveHistory();
+        }, 1000);
     }
 
     handleJobError(error) {
@@ -543,6 +559,111 @@ class CSDbSpiderApp {
     hideAllDropdowns() {
         this.hideDropdown(this.partyDropdown);
         this.hideDropdown(this.groupDropdown);
+    }
+
+    /**
+     * Load and display archive history
+     */
+    async loadArchiveHistory() {
+        try {
+            const response = await fetch('/api/archives');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const archives = await response.json();
+            this.displayArchives(archives);
+            
+        } catch (error) {
+            console.error('Failed to load archive history:', error);
+            this.displayArchiveError();
+        }
+    }
+
+    /**
+     * Display archives in the UI
+     * @param {Array} archives - Array of archive metadata
+     */
+    displayArchives(archives) {
+        if (!archives || archives.length === 0) {
+            this.archivesList.innerHTML = '<p class="no-archives-message">No archives available yet. Create your first archive above!</p>';
+            return;
+        }
+
+        const archiveItems = archives.map(archive => this.createArchiveElement(archive)).join('');
+        this.archivesList.innerHTML = archiveItems;
+    }
+
+    /**
+     * Create HTML element for a single archive
+     * @param {Object} archive - Archive metadata
+     * @returns {string} HTML string for the archive element
+     */
+    createArchiveElement(archive) {
+        const createdDate = new Date(archive.createdAt).toLocaleDateString();
+        const createdTime = new Date(archive.createdAt).toLocaleTimeString();
+        const fileSize = this.formatFileSize(archive.fileSize);
+        
+        let typeLabel = archive.downloadType;
+        let paramLabel = '';
+        
+        switch (archive.downloadType) {
+            case 'toplist':
+                typeLabel = 'Top List';
+                paramLabel = 'Demo releases';
+                break;
+            case 'party':
+                typeLabel = 'Party/Event';
+                paramLabel = archive.params.partyName || `ID: ${archive.params.partyId}`;
+                break;
+            case 'group':
+                typeLabel = 'Group';
+                paramLabel = archive.params.groupName || `ID: ${archive.params.groupId}`;
+                break;
+        }
+
+        return `
+            <div class="archive-item">
+                <div class="archive-info">
+                    <div class="archive-title">${this.escapeHtml(typeLabel)} - ${this.escapeHtml(paramLabel)}</div>
+                    <div class="archive-meta">
+                        <span class="meta-item">📅 ${createdDate} ${createdTime}</span>
+                        <span class="meta-item">📦 ${archive.params.maxReleases} releases</span>
+                        <span class="meta-item">⬇️ ${archive.downloadCount} downloads</span>
+                    </div>
+                </div>
+                <div class="archive-actions">
+                    <div class="archive-size">${fileSize}</div>
+                    <a href="/download/archive/${encodeURIComponent(archive.filename)}" 
+                       class="archive-download-btn"
+                       download="${archive.filename}">
+                        Download
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Format file size in human readable format
+     * @param {number} bytes - File size in bytes
+     * @returns {string} Formatted file size
+     */
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    /**
+     * Display error message for archives
+     */
+    displayArchiveError() {
+        this.archivesList.innerHTML = '<p class="no-archives-message">Failed to load archive history. Please try again later.</p>';
     }
 
     /**

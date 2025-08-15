@@ -605,8 +605,11 @@ def main():
             if Path(f"releases/{name}").exists():
                 found += 1
                 break
-    print(f"Need to download {len(releases)-found} releases")
+    print(f"Need to download {len(releases)-found} releases", flush=True)
+    if len(releases) > found:
+        print("Zipping", flush=True)
     download_releases(releases, template, to_prg)
+    print("Done", flush=True)
 
 
 if __name__ == "__main__":

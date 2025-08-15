@@ -311,7 +311,7 @@ class CSDbSpiderApp {
         // Create a temporary anchor element to trigger download
         const link = document.createElement('a');
         link.href = `/download/${this.currentJobId}`;
-        link.download = `csdb-archive-${this.currentJobId}.zip`;
+        // Don't set download attribute - let server determine filename
         link.style.display = 'none';
         
         // Add to DOM, click, and remove

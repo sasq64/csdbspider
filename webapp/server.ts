@@ -5,6 +5,40 @@ import { spawn } from 'child_process';
 import path from 'path';
 import JobManager from './jobs';
 
+/**
+ * ASCII name sanitization - converts names to safe ASCII characters
+ * Based on the fixname function from utils.py
+ */
+function fixname(s: string, removeDots: boolean = true): string {
+    // Character translation table based on utils.py
+    const nametrans: { [key: string]: string } = {
+        '\\': '.', '/': '.', ':': '.', '*': '.', '"': "'", '<': '(', '>': ')', '|': '.',
+        'Ç': 'C', 'ü': 'u', 'é': 'e', 'â': 'a', 'ä': 'a', 'à': 'a', 'å': 'a', 'ç': 'c',
+        'ê': 'e', 'ë': 'e', 'è': 'e', 'ï': 'i', 'î': 'i', 'ì': 'i', 'Ä': 'A', 'Å': 'A',
+        'É': 'E', 'æ': 'a', 'Æ': 'A', 'ô': 'o', 'ö': 'o', 'ò': 'o', 'û': 'u', 'ù': 'u',
+        'ÿ': 'y', 'Ö': 'O', 'Ü': 'U', '¢': '.', '£': '$', '¥': 'Y', '₧': '_', 'ƒ': 'f',
+        'á': 'a', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n', 'Ñ': 'N', 'ª': "'", 'º': "'",
+        '¿': '?', '⌐': '.', '¬': '.', '½': '.', '¼': '.', '¡': '!', '«': '.', '»': '.',
+        'À': 'A', 'Á': 'A', 'Â': 'A', 'Ã': 'A', 'È': 'E', 'Ê': 'E', 'Ë': 'E', 'Í': 'I',
+        'Î': 'I', 'Ï': 'I', 'Ì': 'I', 'Ð': 'D', 'Ó': 'O', 'Ô': 'O', 'Õ': 'O', 'Ø': 'O',
+        'Ù': 'U', 'Ú': 'U', 'Û': 'U', 'Ý': 'Y', 'Þ': 'd', 'ß': 'B', 'ð': 'd', 'þ': 'D',
+        'ý': 'y'
+    };
+    
+    // Apply character translations
+    let result = s.split('').map(char => nametrans[char] || char).join('');
+    
+    // Remove control characters and non-ASCII
+    result = result.replace(/[^\x20-\x7E]/g, '.');
+    
+    if (removeDots) {
+        // Remove trailing dots and spaces
+        result = result.replace(/[. ]+$/, '');
+    }
+    
+    return result;
+}
+
 interface JobParams {
   downloadType: 'toplist' | 'party' | 'group';
   partyName?: string | undefined;
@@ -276,7 +310,26 @@ app.get('/download/:jobId', (req: express.Request<{jobId: string}>, res: express
         return res.status(404).json({ error: 'Job not found or not completed' });
     }
     
-    const filename = `csdb-archive-${req.params.jobId}.zip`;
+    // Generate filename based on job parameters and content type
+    let filename: string;
+    const { downloadType, partyName, groupName, maxReleases } = job.params;
+    
+    switch (downloadType) {
+        case 'toplist':
+            filename = `csdb-top${maxReleases}-releases.zip`;
+            break;
+        case 'group':
+            const sanitizedGroup = fixname(groupName || 'unknown-group');
+            filename = `${sanitizedGroup}-top-${maxReleases}-releases.zip`;
+            break;
+        case 'party':
+            const sanitizedParty = fixname(partyName || 'unknown-party');
+            filename = `${sanitizedParty}-releases.zip`;
+            break;
+        default:
+            filename = `csdb-archive-${req.params.jobId}.zip`;
+    }
+    
     return res.download(job.downloadPath!, filename, (err) => {
         if (err) {
             console.error('Download error:', err);

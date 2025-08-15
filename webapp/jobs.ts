@@ -12,6 +12,8 @@ interface JobParams {
     downloadType: 'toplist' | 'party' | 'group';
     partyName?: string | undefined;
     groupName?: string | undefined;
+    partyId?: number | undefined;
+    groupId?: number | undefined;
     maxReleases: number;
 }
 
@@ -96,8 +98,8 @@ class JobManager extends EventEmitter {
      * @param job - The job object containing configuration and state
      */
     private executeCSDb(job: Job): void {
-        const { downloadType, partyName, groupName, maxReleases } = job.params;
-        const csdbPath = path.join(__dirname, '..', 'csdb.py');
+        const { downloadType, partyName, groupName, partyId, groupId, maxReleases } = job.params;
+        const csdbPath = path.join(__dirname, '..', '..', 'csdb.py');
 
         let args: string[] = [csdbPath, '-m', maxReleases.toString()];
 
@@ -106,12 +108,16 @@ class JobManager extends EventEmitter {
                 args.push('-l', 'demo');
                 break;
             case 'party':
-                if (partyName) {
+                if (partyId !== undefined) {
+                    args.push('-e', partyId.toString());
+                } else if (partyName) {
                     args.push('-e', partyName);
                 }
                 break;
             case 'group':
-                if (groupName) {
+                if (groupId !== undefined) {
+                    args.push('-g', groupId.toString());
+                } else if (groupName) {
                     args.push('-g', groupName);
                 }
                 break;
@@ -124,7 +130,7 @@ class JobManager extends EventEmitter {
         console.log(`[Job ${job.id}] CSDb script path: ${csdbPath}`);
 
         const csdbProcess: ChildProcess = spawn('python3', args, {
-            cwd: path.join(__dirname, '..'),
+            cwd: path.join(__dirname, '..', '..'),
             stdio: ['pipe', 'pipe', 'pipe']
         });
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
-import bisect
 import re
+import bisect
 import subprocess
 import sys
 import urllib.error
@@ -60,6 +60,18 @@ def get_groups() -> list[tuple[str, int]]:
         result.append((link.name, link.id))
     return result
 
+def get_events() -> list[tuple[str, int]]:
+    result: list[tuple[str, int]] = []
+    soup = get_soup(r"https://csdb.dk/latestadditions.php?latype=event&days=10000")
+    pattern = re.compile(r"^/event/\?id=(\d+)")
+    links = soup.find_all("a", href=pattern)
+    for link in links:
+        match = pattern.match(link.get('href'))
+        if match:
+            event_id = int(match.group(1))
+            result.append((link.text, event_id))
+    return result
+
 
 def search(what: str, text: str) -> list[int]:
     text = urllib.parse.quote(text)
@@ -97,6 +109,32 @@ def get_toplist_releases(what: str) -> list[Link]:
     soup = get_soup(url)
     return get_links_from_csdb_page(soup)
 
+
+def get_events_from_csdb_page(soup: BeautifulSoup) -> list[Link]:
+    # Find starting table
+    b = soup.find("b", string="Place")
+    table = b.find_parent("table") if b else None
+    if table is None:
+        sys.exit("Could not find release table")
+
+    releases: list[Link] = []
+    ok = False
+    place = 0
+    votes = re.compile("votes")
+    for tr in table.find_all("tr"):
+        if ok:
+            d = tr.find_all("td")
+            s = d[0].text.strip()
+            if s != "":
+                place = int(s)
+            title = d[1].text
+            href = d[1].find("a").attrs["href"]
+            id = int(href.split("=")[1].strip())
+            rating = float(d[2].text.strip())
+            releases.append(Link(id, place, rating, title))
+        else:
+            ok = tr.find("b", string=votes)
+    return releases
 
 def get_links_from_csdb_page(soup: BeautifulSoup) -> list[Link]:
     # Find starting table
@@ -414,8 +452,22 @@ def main():
         help="Target template; how to save downloaded files",
         default="Demos/{rank:03}. {group} - {title}{ ({year})}",
     )
+    arg_parser.add_argument(
+        "--list",
+        help="Get a list of things"
+    )
 
     args = arg_parser.parse_args()
+
+    if args.list:
+        if args.list == "groups":
+            for name,id in get_groups():
+                print(f'"{name}",{id}')
+        elif args.list == "events":
+            for name,id in get_events():
+                print(f'"{name}",{id}')
+        return
+
     min_rating = args.min_rating or -1
 
     v = int(args.verbose)

@@ -20,7 +20,15 @@
  * @property {'toplist'|'party'|'group'} downloadType - Type of download
  * @property {string} [partyName] - Party name (for party downloads)
  * @property {string} [groupName] - Group name (for group downloads)
+ * @property {number} [partyId] - Party ID (for party downloads)
+ * @property {number} [groupId] - Group ID (for group downloads)
  * @property {number} maxReleases - Maximum number of releases
+ */
+
+/**
+ * @typedef {Object} AutocompleteItem
+ * @property {string} name - Display name
+ * @property {number} id - Unique identifier
  */
 
 class CSDbSpiderApp {
@@ -29,9 +37,14 @@ class CSDbSpiderApp {
         this.currentJobId = null;
         /** @type {WebSocket|null} */
         this.websocket = null;
+        /** @type {number|null} */
+        this.selectedPartyId = null;
+        /** @type {number|null} */
+        this.selectedGroupId = null;
         this.initializeElements();
         this.attachEventListeners();
         this.connectWebSocket();
+        this.initializeAutocomplete();
     }
 
     initializeElements() {
@@ -41,6 +54,8 @@ class CSDbSpiderApp {
         this.groupGroup = document.getElementById('groupGroup');
         this.partyNameInput = document.getElementById('partyName');
         this.groupNameInput = document.getElementById('groupName');
+        this.partyDropdown = document.getElementById('partyDropdown');
+        this.groupDropdown = document.getElementById('groupDropdown');
         this.maxReleasesSlider = document.getElementById('maxReleases');
         this.sliderValue = document.querySelector('.slider-value');
         this.generateBtn = document.getElementById('generateBtn');
@@ -163,6 +178,8 @@ class CSDbSpiderApp {
             downloadType: this.downloadTypeSelect.value,
             partyName: this.partyNameInput.value,
             groupName: this.groupNameInput.value,
+            partyId: this.selectedPartyId,
+            groupId: this.selectedGroupId,
             maxReleases: parseInt(this.maxReleasesSlider.value)
         };
         
@@ -270,7 +287,7 @@ class CSDbSpiderApp {
         
         this.downloadBtn.onclick = () => {
             console.log('[Frontend] Download button clicked');
-            window.location.href = `/download/${this.currentJobId}`;
+            this.triggerDownload();
         };
     }
 
@@ -288,8 +305,28 @@ class CSDbSpiderApp {
 
     handleDownload() {
         if (this.currentJobId) {
-            window.open(`/download/${this.currentJobId}`, '_blank');
+            this.triggerDownload();
         }
+    }
+
+    /**
+     * Trigger file download without navigating away from the page
+     */
+    triggerDownload() {
+        if (!this.currentJobId) return;
+        
+        // Create a temporary anchor element to trigger download
+        const link = document.createElement('a');
+        link.href = `/download/${this.currentJobId}`;
+        link.download = `csdb-archive-${this.currentJobId}.zip`;
+        link.style.display = 'none';
+        
+        // Add to DOM, click, and remove
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        console.log('[Frontend] Download triggered for job:', this.currentJobId);
     }
 
     resetForm() {
@@ -302,10 +339,229 @@ class CSDbSpiderApp {
         this.generateBtn.innerHTML = '🚀 Generate Archive';
         
         this.currentJobId = null;
+        this.selectedPartyId = null;
+        this.selectedGroupId = null;
         
         this.form.reset();
         this.updateSliderValue();
         this.handleTypeChange();
+        this.hideAllDropdowns();
+    }
+
+    /**
+     * Initialize autocomplete functionality for party and group inputs
+     */
+    initializeAutocomplete() {
+        this.setupAutocomplete('party', this.partyNameInput, this.partyDropdown);
+        this.setupAutocomplete('group', this.groupNameInput, this.groupDropdown);
+    }
+
+    /**
+     * Set up autocomplete for a specific input type
+     * @param {string} type - 'party' or 'group'
+     * @param {HTMLInputElement} input - The input element
+     * @param {HTMLElement} dropdown - The dropdown element
+     */
+    setupAutocomplete(type, input, dropdown) {
+        let debounceTimer;
+        let highlightedIndex = -1;
+
+        input.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            const query = e.target.value.trim();
+
+            if (query.length < 2) {
+                this.hideDropdown(dropdown);
+                this.clearSelection(type);
+                return;
+            }
+
+            debounceTimer = setTimeout(() => {
+                this.fetchAutocompleteData(type, query, dropdown);
+            }, 300);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            const items = dropdown.querySelectorAll('.autocomplete-item');
+            
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    highlightedIndex = Math.min(highlightedIndex + 1, items.length - 1);
+                    this.updateHighlight(items, highlightedIndex);
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    highlightedIndex = Math.max(highlightedIndex - 1, -1);
+                    this.updateHighlight(items, highlightedIndex);
+                    break;
+                case 'Enter':
+                    e.preventDefault();
+                    if (highlightedIndex >= 0 && items[highlightedIndex]) {
+                        this.selectItem(type, items[highlightedIndex], input, dropdown);
+                    }
+                    break;
+                case 'Escape':
+                    this.hideDropdown(dropdown);
+                    highlightedIndex = -1;
+                    break;
+            }
+        });
+
+        input.addEventListener('blur', (e) => {
+            // Delay hiding to allow for item selection
+            setTimeout(() => {
+                this.hideDropdown(dropdown);
+                highlightedIndex = -1;
+            }, 150);
+        });
+
+        input.addEventListener('focus', () => {
+            if (input.value.length >= 2) {
+                this.fetchAutocompleteData(type, input.value, dropdown);
+            }
+        });
+    }
+
+    /**
+     * Fetch autocomplete data from the server
+     * @param {string} type - 'party' or 'group'
+     * @param {string} query - Search query
+     * @param {HTMLElement} dropdown - Dropdown element
+     */
+    async fetchAutocompleteData(type, query, dropdown) {
+        try {
+            const endpoint = type === 'party' ? 'events' : 'groups';
+            const response = await fetch(`/api/autocomplete/${endpoint}?q=${encodeURIComponent(query)}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.populateDropdown(type, data, dropdown);
+        } catch (error) {
+            console.error(`Error fetching ${type} data:`, error);
+            this.hideDropdown(dropdown);
+        }
+    }
+
+    /**
+     * Populate dropdown with autocomplete results
+     * @param {string} type - 'party' or 'group'
+     * @param {AutocompleteItem[]} items - Array of autocomplete items
+     * @param {HTMLElement} dropdown - Dropdown element
+     */
+    populateDropdown(type, items, dropdown) {
+        dropdown.innerHTML = '';
+
+        if (items.length === 0) {
+            dropdown.innerHTML = '<div class="autocomplete-item">No results found</div>';
+            this.showDropdown(dropdown);
+            return;
+        }
+
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'autocomplete-item';
+            div.innerHTML = `
+                <span class="item-name">${this.escapeHtml(item.name)}</span>
+                <span class="item-id">#${item.id}</span>
+            `;
+            div.dataset.id = item.id;
+            div.dataset.name = item.name;
+
+            div.addEventListener('click', () => {
+                this.selectItem(type, div, 
+                    type === 'party' ? this.partyNameInput : this.groupNameInput, 
+                    dropdown);
+            });
+
+            dropdown.appendChild(div);
+        });
+
+        this.showDropdown(dropdown);
+    }
+
+    /**
+     * Select an autocomplete item
+     * @param {string} type - 'party' or 'group'
+     * @param {HTMLElement} item - Selected item element
+     * @param {HTMLInputElement} input - Input element
+     * @param {HTMLElement} dropdown - Dropdown element
+     */
+    selectItem(type, item, input, dropdown) {
+        const name = item.dataset.name;
+        const id = parseInt(item.dataset.id);
+
+        input.value = name;
+        
+        if (type === 'party') {
+            this.selectedPartyId = id;
+        } else {
+            this.selectedGroupId = id;
+        }
+
+        this.hideDropdown(dropdown);
+        console.log(`Selected ${type}: ${name} (ID: ${id})`);
+    }
+
+    /**
+     * Clear selection for a specific type
+     * @param {string} type - 'party' or 'group'
+     */
+    clearSelection(type) {
+        if (type === 'party') {
+            this.selectedPartyId = null;
+        } else {
+            this.selectedGroupId = null;
+        }
+    }
+
+    /**
+     * Update highlighted item in dropdown
+     * @param {NodeList} items - List of autocomplete items
+     * @param {number} index - Index to highlight
+     */
+    updateHighlight(items, index) {
+        items.forEach((item, i) => {
+            item.classList.toggle('highlighted', i === index);
+        });
+    }
+
+    /**
+     * Show dropdown
+     * @param {HTMLElement} dropdown - Dropdown element
+     */
+    showDropdown(dropdown) {
+        dropdown.classList.add('show');
+    }
+
+    /**
+     * Hide dropdown
+     * @param {HTMLElement} dropdown - Dropdown element
+     */
+    hideDropdown(dropdown) {
+        dropdown.classList.remove('show');
+    }
+
+    /**
+     * Hide all dropdowns
+     */
+    hideAllDropdowns() {
+        this.hideDropdown(this.partyDropdown);
+        this.hideDropdown(this.groupDropdown);
+    }
+
+    /**
+     * Escape HTML for safe insertion
+     * @param {string} text - Text to escape
+     * @returns {string} Escaped text
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 }
 

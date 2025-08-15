@@ -30,13 +30,19 @@
 
                     <div class="form-group" id="partyGroup" style="display: none;">
                         <label for="partyName">Party/Event Name:</label>
-                        <input type="text" id="partyName" name="partyName" placeholder="e.g., Gubbdata 2021">
+                        <div class="autocomplete-container">
+                            <input type="text" id="partyName" name="partyName" placeholder="e.g., Gubbdata 2021" autocomplete="off">
+                            <div class="autocomplete-dropdown" id="partyDropdown"></div>
+                        </div>
                         <small>Enter the name of the party or event to search for</small>
                     </div>
 
                     <div class="form-group" id="groupGroup" style="display: none;">
                         <label for="groupName">Group Name:</label>
-                        <input type="text" id="groupName" name="groupName" placeholder="e.g., Fairlight">
+                        <div class="autocomplete-container">
+                            <input type="text" id="groupName" name="groupName" placeholder="e.g., Fairlight" autocomplete="off">
+                            <div class="autocomplete-dropdown" id="groupDropdown"></div>
+                        </div>
                         <small>Enter the name of the group to search for</small>
                     </div>
 

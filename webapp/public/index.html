@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSDbSpider Web Interface</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🕷️ CSDbSpider Web Interface</h1>
+            <p>Generate and download C64 archives from CSDb</p>
+        </header>
+
+        <main>
+            <form id="downloadForm" class="download-form">
+                <div class="form-section">
+                    <h2>Download Configuration</h2>
+                    
+                    <div class="form-group">
+                        <label for="downloadType">Download Type:</label>
+                        <select id="downloadType" name="downloadType" required>
+                            <option value="">Select type...</option>
+                            <option value="toplist">Top List (Demo)</option>
+                            <option value="party">Party/Event</option>
+                            <option value="group">Group</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="partyGroup" style="display: none;">
+                        <label for="partyName">Party/Event Name:</label>
+                        <input type="text" id="partyName" name="partyName" placeholder="e.g., Gubbdata 2021">
+                        <small>Enter the name of the party or event to search for</small>
+                    </div>
+
+                    <div class="form-group" id="groupGroup" style="display: none;">
+                        <label for="groupName">Group Name:</label>
+                        <input type="text" id="groupName" name="groupName" placeholder="e.g., Fairlight">
+                        <small>Enter the name of the group to search for</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="maxReleases">Maximum Releases:</label>
+                        <div class="slider-container">
+                            <input type="range" id="maxReleases" name="maxReleases" 
+                                   min="1" max="100" value="25" class="slider">
+                            <span class="slider-value">25</span>
+                        </div>
+                        <small>Number of releases to include in the archive</small>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" id="generateBtn" class="btn btn-primary">
+                        🚀 Generate Archive
+                    </button>
+                </div>
+            </form>
+
+            <div id="progressSection" class="progress-section" style="display: none;">
+                <h2>Progress</h2>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-info">
+                    <span id="progressPercent">0%</span>
+                    <span id="progressStatus">Preparing...</span>
+                </div>
+                <div id="progressDetails" class="progress-details"></div>
+            </div>
+
+            <div id="downloadSection" class="download-section" style="display: none;">
+                <h2>Download Ready</h2>
+                <p>Your archive has been generated successfully!</p>
+                <button id="downloadBtn" class="btn btn-success">
+                    📦 Download Archive
+                </button>
+                <button id="newJobBtn" class="btn btn-secondary">
+                    🔄 Create New Archive
+                </button>
+            </div>
+
+            <div id="errorSection" class="error-section" style="display: none;">
+                <h2>Error</h2>
+                <p id="errorMessage"></p>
+                <button id="retryBtn" class="btn btn-secondary">
+                    🔄 Try Again
+                </button>
+            </div>
+        </main>
+
+        <footer>
+            <p>
+                <strong>CSDbSpider</strong> - C64 Scene Database Archive Tool<br>
+                <small>This tool helps preserve C64 computer history by archiving releases from CSDb</small>
+            </p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

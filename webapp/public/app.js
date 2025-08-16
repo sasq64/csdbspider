@@ -59,17 +59,17 @@ class CSDbSpiderApp {
         this.groupDropdown = document.getElementById('groupDropdown');
         this.maxReleasesSelect = document.getElementById('maxReleases');
         this.generateBtn = document.getElementById('generateBtn');
-        
+
         this.progressSection = document.getElementById('progressSection');
         this.progressFill = document.getElementById('progressFill');
         this.progressPercent = document.getElementById('progressPercent');
         this.progressStatus = document.getElementById('progressStatus');
         this.progressDetails = document.getElementById('progressDetails');
-        
+
         this.downloadSection = document.getElementById('downloadSection');
         this.downloadBtn = document.getElementById('downloadBtn');
         this.newJobBtn = document.getElementById('newJobBtn');
-        
+
         this.errorSection = document.getElementById('errorSection');
         this.errorMessage = document.getElementById('errorMessage');
         this.retryBtn = document.getElementById('retryBtn');
@@ -89,14 +89,14 @@ class CSDbSpiderApp {
     connectWebSocket() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}`;
-        
+
         console.log('[Frontend] Connecting to WebSocket at:', wsUrl);
         this.websocket = new WebSocket(wsUrl);
-        
+
         this.websocket.onopen = () => {
             console.log('[Frontend] WebSocket connected successfully');
         };
-        
+
         this.websocket.onmessage = (event) => {
             console.log('[Frontend] Raw WebSocket message received:', event.data);
             try {
@@ -106,12 +106,12 @@ class CSDbSpiderApp {
                 console.error('[Frontend] Failed to parse WebSocket message:', error, 'Raw data:', event.data);
             }
         };
-        
+
         this.websocket.onclose = (event) => {
             console.log('[Frontend] WebSocket disconnected. Code:', event.code, 'Reason:', event.reason);
             setTimeout(() => this.connectWebSocket(), 3000);
         };
-        
+
         this.websocket.onerror = (error) => {
             console.error('[Frontend] WebSocket error:', error);
         };
@@ -126,7 +126,7 @@ class CSDbSpiderApp {
         console.log('[Frontend] Current job ID:', this.currentJobId);
         console.log('[Frontend] Message job ID:', message.jobId);
         console.log('[Frontend] Job IDs match:', message.jobId === this.currentJobId);
-        
+
         if (message.jobId !== this.currentJobId) {
             console.warn(`[Frontend] Ignoring message for different job: received=${message.jobId} vs current=${this.currentJobId}`);
             return;
@@ -154,13 +154,13 @@ class CSDbSpiderApp {
 
     handleTypeChange() {
         const type = this.downloadTypeSelect.value;
-        
+
         this.partyGroup.style.display = type === 'party' ? 'block' : 'none';
         this.groupGroup.style.display = type === 'group' ? 'block' : 'none';
-        
+
         this.partyNameInput.required = type === 'party';
         this.groupNameInput.required = type === 'group';
-        
+
         if (type === 'party') {
             this.partyNameInput.focus();
         } else if (type === 'group') {
@@ -172,7 +172,7 @@ class CSDbSpiderApp {
     async handleSubmit(e) {
         e.preventDefault();
         console.log('[Frontend] Form submitted');
-        
+
         if (!this.validateForm()) {
             console.log('[Frontend] Form validation failed');
             return;
@@ -186,7 +186,7 @@ class CSDbSpiderApp {
             groupId: this.selectedGroupId,
             maxReleases: parseInt(this.maxReleasesSelect.value)
         };
-        
+
         console.log('[Frontend] Submitting form data:', formData);
 
         this.generateBtn.disabled = true;
@@ -212,7 +212,7 @@ class CSDbSpiderApp {
             this.currentJobId = result.jobId;
             console.log('[Frontend] Job started with ID:', this.currentJobId);
             this.showProgressSection();
-            
+
         } catch (error) {
             console.error('[Frontend] Error starting job:', error);
             this.handleJobError(error.message);
@@ -223,24 +223,24 @@ class CSDbSpiderApp {
 
     validateForm() {
         const type = this.downloadTypeSelect.value;
-        
+
         if (!type) {
             alert('Please select a download type');
             return false;
         }
-        
+
         if (type === 'party' && !this.partyNameInput.value.trim()) {
             alert('Please enter a party name');
             this.partyNameInput.focus();
             return false;
         }
-        
+
         if (type === 'group' && !this.groupNameInput.value.trim()) {
             alert('Please enter a group name');
             this.groupNameInput.focus();
             return false;
         }
-        
+
         return true;
     }
 
@@ -249,10 +249,10 @@ class CSDbSpiderApp {
         this.form.style.display = 'none';
         this.progressSection.style.display = 'block';
         this.progressSection.classList.add('fade-in');
-        
+
         this.downloadSection.style.display = 'none';
         this.errorSection.style.display = 'none';
-        
+
         this.updateProgress({
             percent: 0,
             current: 'Starting job...',
@@ -270,12 +270,12 @@ class CSDbSpiderApp {
         this.progressFill.style.width = `${data.percent}%`;
         this.progressPercent.textContent = `${data.percent}%`;
         this.progressStatus.textContent = data.current || 'Processing...';
-        
+
         if (data.total > 0) {
             const details = `Found ${data.total} releases, completed ${data.completed}`;
             this.progressDetails.textContent = details;
         }
-        
+
         if (data.percent < 100) {
             this.progressFill.classList.add('pulse');
         } else {
@@ -288,7 +288,7 @@ class CSDbSpiderApp {
         this.progressSection.style.display = 'none';
         this.downloadSection.style.display = 'block';
         this.downloadSection.classList.add('fade-in');
-        
+
         this.downloadBtn.onclick = () => {
             console.log('[Frontend] Download button clicked');
             this.triggerDownload();
@@ -305,9 +305,9 @@ class CSDbSpiderApp {
         this.downloadSection.style.display = 'none';
         this.errorSection.style.display = 'block';
         this.errorSection.classList.add('fade-in');
-        
+
         this.errorMessage.textContent = error;
-        
+
         this.generateBtn.disabled = false;
         this.generateBtn.innerHTML = '🚀 Generate Archive';
     }
@@ -323,18 +323,18 @@ class CSDbSpiderApp {
      */
     triggerDownload() {
         if (!this.currentJobId) return;
-        
+
         // Create a temporary anchor element to trigger download
         const link = document.createElement('a');
         link.href = `/download/${this.currentJobId}`;
         // Don't set download attribute - let server determine filename
         link.style.display = 'none';
-        
+
         // Add to DOM, click, and remove
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
+
         console.log('[Frontend] Download triggered for job:', this.currentJobId);
     }
 
@@ -343,14 +343,14 @@ class CSDbSpiderApp {
         this.progressSection.style.display = 'none';
         this.downloadSection.style.display = 'none';
         this.errorSection.style.display = 'none';
-        
+
         this.generateBtn.disabled = false;
         this.generateBtn.innerHTML = '🚀 Generate Archive';
-        
+
         this.currentJobId = null;
         this.selectedPartyId = null;
         this.selectedGroupId = null;
-        
+
         this.form.reset();
         this.handleTypeChange();
         this.hideAllDropdowns();
@@ -391,7 +391,7 @@ class CSDbSpiderApp {
 
         input.addEventListener('keydown', (e) => {
             const items = dropdown.querySelectorAll('.autocomplete-item');
-            
+
             switch (e.key) {
                 case 'ArrowDown':
                     e.preventDefault();
@@ -441,7 +441,7 @@ class CSDbSpiderApp {
         try {
             const endpoint = type === 'party' ? 'events' : 'groups';
             const response = await fetch(`/api/autocomplete/${endpoint}?q=${encodeURIComponent(query)}`);
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
@@ -480,8 +480,8 @@ class CSDbSpiderApp {
             div.dataset.name = item.name;
 
             div.addEventListener('click', () => {
-                this.selectItem(type, div, 
-                    type === 'party' ? this.partyNameInput : this.groupNameInput, 
+                this.selectItem(type, div,
+                    type === 'party' ? this.partyNameInput : this.groupNameInput,
                     dropdown);
             });
 
@@ -503,7 +503,7 @@ class CSDbSpiderApp {
         const id = parseInt(item.dataset.id);
 
         input.value = name;
-        
+
         if (type === 'party') {
             this.selectedPartyId = id;
         } else {
@@ -570,10 +570,10 @@ class CSDbSpiderApp {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            
+
             const archives = await response.json();
             this.displayArchives(archives);
-            
+
         } catch (error) {
             console.error('Failed to load archive history:', error);
             this.displayArchiveError();
@@ -603,10 +603,10 @@ class CSDbSpiderApp {
         const createdDate = new Date(archive.createdAt).toLocaleDateString();
         const createdTime = new Date(archive.createdAt).toLocaleTimeString();
         const fileSize = this.formatFileSize(archive.fileSize);
-        
+
         let typeLabel = archive.downloadType;
         let paramLabel = '';
-        
+
         switch (archive.downloadType) {
             case 'toplist':
                 typeLabel = 'Top List';
@@ -628,7 +628,7 @@ class CSDbSpiderApp {
                     <div class="archive-title">${this.escapeHtml(typeLabel)} - ${this.escapeHtml(paramLabel)}</div>
                     <div class="archive-meta">
                         <span class="meta-item">📅 ${createdDate} ${createdTime}</span>
-                        <span class="meta-item">📦 ${archive.params.maxReleases} releases</span>
+                        <span class="meta-item">📦 ${archive.actualReleases || archive.params.maxReleases} releases</span>
                         <span class="meta-item">⬇️ ${archive.downloadCount} downloads</span>
                     </div>
                 </div>
@@ -636,7 +636,8 @@ class CSDbSpiderApp {
                     <div class="archive-size">${fileSize}</div>
                     <a href="/download/archive/${encodeURIComponent(archive.filename)}" 
                        class="archive-download-btn"
-                       download="${archive.filename}">
+                       download="${archive.filename}"
+                       data-archive-filename="${archive.filename}">
                         Download
                     </a>
                 </div>
@@ -651,11 +652,11 @@ class CSDbSpiderApp {
      */
     formatFileSize(bytes) {
         if (bytes === 0) return '0 B';
-        
+
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-        
+
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 

@@ -319,12 +319,16 @@ app.get('/download/archive/:filename', (req: express.Request<{filename: string}>
     return res.status(404).json({ error: 'Archive not found' });
   }
   
+  console.log(`[Server] Starting download for archive: ${filename}`);
+  
   // Increment download count
   jobManager.incrementDownloadCount(filename);
   
   return res.download(archivePath, filename, (err) => {
     if (err) {
       console.error('Archive download error:', err);
+    } else {
+      console.log(`[Server] Archive download completed: ${filename}`);
     }
   });
 });

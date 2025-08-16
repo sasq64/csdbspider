@@ -52,6 +52,7 @@ interface ArchiveMetadata {
     params: JobParams;
     fileSize: number;
     downloadCount: number;
+    actualReleases: number;
 }
 
 /**
@@ -359,7 +360,8 @@ class JobManager extends EventEmitter {
                     break;
             }
 
-            const filename = `${timestamp}-${job.params.downloadType}-${archiveParam}-${job.params.maxReleases}.zip`
+            const actualReleases = job.progress.total || job.params.maxReleases;
+            const filename = `${timestamp}-${job.params.downloadType}-${archiveParam}-${actualReleases}.zip`
                 .replace(/[^\w\-_.]/g, '-');
             const permanentPath = path.join(this.archivesDir, filename);
 
@@ -372,7 +374,8 @@ class JobManager extends EventEmitter {
                 downloadType: job.params.downloadType,
                 params: job.params,
                 fileSize,
-                downloadCount: 0
+                downloadCount: 0,
+                actualReleases
             };
 
             this.updateArchiveHistory(metadata);
@@ -443,22 +446,31 @@ class JobManager extends EventEmitter {
      */
     incrementDownloadCount(filename: string): void {
         try {
+            console.log(`[JobManager] Attempting to increment download count for: ${filename}`);
+            
             if (!fs.existsSync(this.historyFile)) {
+                console.log(`[JobManager] History file does not exist: ${this.historyFile}`);
                 return;
             }
 
             const data = fs.readFileSync(this.historyFile, 'utf8');
             const history: ArchiveHistory = JSON.parse(data);
             
+            console.log(`[JobManager] Found ${history.archives.length} archives in history`);
+            console.log(`[JobManager] Looking for archive with filename: ${filename}`);
+            
             const archive = history.archives.find(a => a.filename === filename);
             if (archive) {
                 archive.downloadCount++;
                 fs.writeFileSync(this.historyFile, JSON.stringify(history, null, 2));
-                console.log(`Incremented download count for ${filename} to ${archive.downloadCount}`);
+                console.log(`[JobManager] Incremented download count for ${filename} to ${archive.downloadCount}`);
+            } else {
+                console.log(`[JobManager] Archive not found in history: ${filename}`);
+                console.log(`[JobManager] Available filenames:`, history.archives.map(a => a.filename));
             }
 
         } catch (error) {
-            console.error('Failed to increment download count:', error);
+            console.error('[JobManager] Failed to increment download count:', error);
         }
     }
 

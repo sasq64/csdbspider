@@ -52,12 +52,24 @@ def get_soup(url: str) -> BeautifulSoup:
         sys.exit(1)
 
 
-def get_groups() -> list[tuple[str, int]]:
+def get_groups_old() -> list[tuple[str, int]]:
     result: list[tuple[str, int]] = []
     soup = get_soup(r"https://csdb.dk/toplist.php?type=group&subtype=(1)")
     links = get_links_from_csdb_page(soup)
     for link in links:
         result.append((link.name, link.id))
+    return result
+
+def get_groups() -> list[tuple[str, int]]:
+    result: list[tuple[str, int]] = []
+    soup = get_soup(r"https://csdb.dk/latestadditions.php?latype=group&days=10000")
+    pattern = re.compile(r"^/group/\?id=(\d+)")
+    links = soup.find_all("a", href=pattern)
+    for link in links:
+        match = pattern.match(link.get('href'))
+        if match:
+            event_id = int(match.group(1))
+            result.append((link.text, event_id))
     return result
 
 def get_events() -> list[tuple[str, int]]:

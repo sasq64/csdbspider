@@ -336,6 +336,17 @@ class JobManager extends EventEmitter {
         return this.jobs.get(jobId);
     }
 
+    getTodayString(): string {
+        const now = new Date();
+
+        const year = now.getFullYear();
+        const month = new Intl.DateTimeFormat("en", { month: "short" })
+            .format(now)
+            .toLowerCase();
+        const day = now.getDate();
+
+        return `${year}.${month}.${day}`;
+    }
     /**
      * Saves an archive permanently to the archives directory and updates history.
      * Creates a timestamped filename and maintains the 10 most recent archives.
@@ -345,9 +356,9 @@ class JobManager extends EventEmitter {
      */
     private saveArchivePermanently(job: Job, tempArchivePath: string, fileSize: number): void {
         try {
-            const timestamp = new Date().toISOString().replace(/[:]/g, '-').split('.')[0];
+            const timestamp = this.getTodayString();
             let archiveParam = '';
-            
+
             switch (job.params.downloadType) {
                 case 'toplist':
                     archiveParam = 'toplist';
@@ -361,7 +372,7 @@ class JobManager extends EventEmitter {
             }
 
             const actualReleases = job.progress.total || job.params.maxReleases;
-            const filename = `${timestamp}-${job.params.downloadType}-${archiveParam}-${actualReleases}.zip`
+            const filename = `${timestamp}-${archiveParam}-${actualReleases}.zip`
                 .replace(/[^\w\-_.]/g, '-');
             const permanentPath = path.join(this.archivesDir, filename);
 
@@ -447,7 +458,7 @@ class JobManager extends EventEmitter {
     incrementDownloadCount(filename: string): void {
         try {
             console.log(`[JobManager] Attempting to increment download count for: ${filename}`);
-            
+
             if (!fs.existsSync(this.historyFile)) {
                 console.log(`[JobManager] History file does not exist: ${this.historyFile}`);
                 return;
@@ -455,10 +466,10 @@ class JobManager extends EventEmitter {
 
             const data = fs.readFileSync(this.historyFile, 'utf8');
             const history: ArchiveHistory = JSON.parse(data);
-            
+
             console.log(`[JobManager] Found ${history.archives.length} archives in history`);
             console.log(`[JobManager] Looking for archive with filename: ${filename}`);
-            
+
             const archive = history.archives.find(a => a.filename === filename);
             if (archive) {
                 archive.downloadCount++;

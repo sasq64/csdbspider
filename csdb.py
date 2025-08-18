@@ -576,7 +576,6 @@ def main():
         what: str = args.top_list
         links = get_toplist_releases(what)
 
-    print(f"Collected {len(links)} releases")
 
     count = 0
     for link in links:
@@ -609,6 +608,8 @@ def main():
         if len(releases) >= max_rel:
             break
 
+
+    print(f"Collected {len(releases)} releases")
     found = 0
     for rel in releases:
         for url in rel.downloads:

@@ -1,6 +1,7 @@
 import express from 'express';
 import WebSocket from 'ws';
 import http from 'http';
+import https from 'https';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -84,7 +85,25 @@ interface Job {
 }
 
 const app = express();
-const server = http.createServer(app);
+
+// SSL configuration
+const sslPath = path.join(__dirname, 'ssl');
+const useHTTPS = fs.existsSync(path.join(sslPath, 'cert.pem')) && fs.existsSync(path.join(sslPath, 'key.pem'));
+
+let server: http.Server | https.Server;
+
+if (useHTTPS) {
+  const options = {
+    key: fs.readFileSync(path.join(sslPath, 'key.pem')),
+    cert: fs.readFileSync(path.join(sslPath, 'cert.pem'))
+  };
+  server = https.createServer(options, app);
+  console.log('HTTPS server configured with SSL certificates');
+} else {
+  server = http.createServer(app);
+  console.log('HTTP server configured (no SSL certificates found)');
+}
+
 const wss = new WebSocket.Server({ server });
 const jobManager = new JobManager();
 
@@ -369,10 +388,38 @@ app.get('/download/:jobId', (req: express.Request<{jobId: string}>, res: express
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, async () => {
-    console.log(`CSDbSpider Web App running on port ${PORT}`);
+const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
+
+// Start both HTTP and HTTPS servers if certificates are available
+if (useHTTPS) {
+  // Start HTTPS server
+  server.listen(HTTPS_PORT, async () => {
+    console.log(`CSDbSpider Web App (HTTPS) running on port ${HTTPS_PORT}`);
+    console.log(`Open https://localhost:${HTTPS_PORT} in your browser`);
+    console.log('Note: You may need to accept the self-signed certificate in your browser');
+    
+    // Load autocomplete data after server starts
+    await loadAutocompleteData();
+  });
+
+  // Also start HTTP server for redirect
+  const httpApp = express();
+  httpApp.use((req, res) => {
+    res.redirect(`https://localhost:${HTTPS_PORT}${req.url}`);
+  });
+  
+  const httpServer = http.createServer(httpApp);
+  httpServer.listen(PORT, () => {
+    console.log(`HTTP redirect server running on port ${PORT}`);
+    console.log(`HTTP traffic will be redirected to HTTPS`);
+  });
+} else {
+  // Start only HTTP server
+  server.listen(PORT, async () => {
+    console.log(`CSDbSpider Web App (HTTP) running on port ${PORT}`);
     console.log(`Open http://localhost:${PORT} in your browser`);
     
     // Load autocomplete data after server starts
     await loadAutocompleteData();
-});
+  });
+}

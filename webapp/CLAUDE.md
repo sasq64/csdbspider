@@ -42,9 +42,28 @@ The CSDbSpider Web Application is a Node.js/Express web interface that provides 
 ### Starting the Application
 ```bash
 cd webapp
-npm install  # First time only
-npm start    # Starts server on port 3000
+npm install        # First time only
+npm start          # Starts server (HTTP on port 3000, HTTPS on port 3443 if certificates exist)
 ```
+
+### HTTPS Setup
+The webapp supports HTTPS with SSL certificates:
+
+```bash
+# Generate self-signed certificate for development
+./generate-cert.sh
+
+# Start the application (will use HTTPS if certificates exist)
+npm start
+```
+
+When HTTPS is enabled:
+- HTTPS server runs on port 3443 (configurable with `HTTPS_PORT` env var)
+- HTTP server runs on port 3000 and redirects to HTTPS
+- Certificates are automatically detected in the `ssl/` directory
+- Browser will show security warning for self-signed certificates
+
+For production, replace the self-signed certificates with proper SSL certificates from a Certificate Authority.
 
 ### Testing the Application
 - Navigate to http://localhost:3000

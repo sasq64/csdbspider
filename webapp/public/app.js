@@ -627,9 +627,9 @@ class CSDbSpiderApp {
                 <div class="archive-info">
                     <div class="archive-title">${this.escapeHtml(typeLabel)} - ${this.escapeHtml(paramLabel)}</div>
                     <div class="archive-meta">
-                        <span class="meta-item">📅 ${createdDate} ${createdTime}</span>
-                        <span class="meta-item">📦 ${archive.actualReleases || archive.params.maxReleases} releases</span>
-                        <span class="meta-item">⬇️ ${archive.downloadCount} downloads</span>
+                        <span class="meta-item">${createdDate} ${createdTime}</span>
+                        <span class="meta-item">${archive.actualReleases || archive.params.maxReleases} releases</span>
+                        <span class="meta-item">${archive.downloadCount} downloads</span>
                     </div>
                 </div>
                 <div class="archive-actions">

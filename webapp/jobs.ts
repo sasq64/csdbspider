@@ -372,7 +372,7 @@ class JobManager extends EventEmitter {
             }
 
             const actualReleases = job.progress.total || job.params.maxReleases;
-            const filename = `${timestamp}-${archiveParam}-${actualReleases}.zip`
+            const filename = `csdb-${archiveParam}-${actualReleases}-${timestamp}.zip`
                 .replace(/[^\w\-_.]/g, '-');
             const permanentPath = path.join(this.archivesDir, filename);
 

@@ -46,6 +46,7 @@ class CSDbSpiderApp {
         this.connectWebSocket();
         this.initializeAutocomplete();
         this.loadArchiveHistory();
+        this.handleTypeChange(); // Initialize form state based on current selection
     }
 
     initializeElements() {

@@ -166,7 +166,7 @@ class JobManager extends EventEmitter {
         console.log(`[Job ${job.id}] Working directory: ${job.workDir}`);
         console.log(`[Job ${job.id}] CSDb script path: ${csdbPath}`);
 
-        const csdbProcess: ChildProcess = spawn('python3', args, {
+        const csdbProcess: ChildProcess = spawn('python3', ['-u', ...args], {
             cwd: path.join(__dirname, '..', '..'),
             stdio: ['pipe', 'pipe', 'pipe']
         });
@@ -178,7 +178,7 @@ class JobManager extends EventEmitter {
             const output = data.toString();
             console.log(`[Job ${job.id}] CSDb stdout:`, output);
             stdoutBuffer += output;
-            this.parseProgress(job, stdoutBuffer);
+            this.parseProgress(job, output);
         });
 
         csdbProcess.stderr?.on('data', (data) => {
@@ -238,6 +238,9 @@ class JobManager extends EventEmitter {
                 const match = line.match(/Collected (\d+) releases/);
                 if (match) {
                     job.progress.total = parseInt(match[1]);
+                    if (job.progress.total == 0) {
+                        job.progress.total = 1;
+                    }
                     console.log(`[Job ${job.id}] Updated total releases:`, job.progress.total);
                     this.emit('progress', job.id, {
                         ...job.progress,
@@ -250,6 +253,9 @@ class JobManager extends EventEmitter {
                 const match = line.match(/Need to download (\d+) releases/);
                 if (match) {
                     const remaining = parseInt(match[1]);
+                    if (job.progress.total == 0) {
+                        job.progress.total = 1;
+                    }
                     job.progress.completed = job.progress.total - remaining;
                     job.progress.percent = Math.round((job.progress.completed / job.progress.total) * 100);
                     console.log(`[Job ${job.id}] Progress update: ${job.progress.percent}% (${job.progress.completed}/${job.progress.total})`);

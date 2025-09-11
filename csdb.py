@@ -4,6 +4,7 @@ import re
 import bisect
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -52,7 +53,7 @@ def get_soup(url: str) -> BeautifulSoup:
         sys.exit(1)
 
 
-def get_groups_old() -> list[tuple[str, int]]:
+def get_top_groups() -> list[tuple[str, int]]:
     result: list[tuple[str, int]] = []
     soup = get_soup(r"https://csdb.dk/toplist.php?type=group&subtype=(1)")
     links = get_links_from_csdb_page(soup)
@@ -308,7 +309,15 @@ def unpack_to(file: Path, target_dir: Path, to_prg: bool):
     return False
 
 
-def download_releases(releases: list[Release], template: str, to_prg: bool):
+def fake_download(url: str) -> Path | None:
+    t = urllib.parse.unquote_plus(url)
+    name = urllib.parse.quote_plus(t)
+    file_name = Path(f"releases/{name}")
+    print(f"Downloading {url}")
+    time.sleep(0.004)
+    return file_name
+
+def download_releases(releases: list[Release], template: str, to_prg: bool, fake_it: bool = False):
     for release in releases:
         target_dir = Path(release.format(template))
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -318,6 +327,8 @@ def download_releases(releases: list[Release], template: str, to_prg: bool):
         for dl in release.downloads:
             file = get_cached(dl)
             if file is not None:
+                if fake_it:
+                    fake_download(dl)
                 if unpack_to(file, target_dir, to_prg):
                     ok = True
                     break
@@ -468,12 +479,21 @@ def main():
         "--list",
         help="Get a list of things"
     )
+    arg_parser.add_argument(
+        "--fake-dl", action="store_true",
+        help="Fake downloads for testing purposes"
+    )
 
     args = arg_parser.parse_args()
 
     if args.list:
         if args.list == "groups":
+            all_groups : dict[int, str] = {}
+            for name,id in get_top_groups():
+                all_groups[id] = name
             for name,id in get_groups():
+                all_groups[id] = name
+            for id,name in all_groups.items():
                 print(f'"{name}",{id}')
         elif args.list == "events":
             for name,id in get_events():
@@ -481,6 +501,8 @@ def main():
         return
 
     min_rating = args.min_rating or -1
+
+    fake_it = args.fake_dl if args.fake_dl is not None else False
 
     v = int(args.verbose)
     show_run_output(v > 0)
@@ -611,17 +633,18 @@ def main():
 
     print(f"Collected {len(releases)} releases")
     found = 0
-    for rel in releases:
-        for url in rel.downloads:
-            t = urllib.parse.unquote_plus(url)
-            name = urllib.parse.quote_plus(t)
-            if Path(f"releases/{name}").exists():
-                found += 1
-                break
+    if not fake_it:
+        for rel in releases:
+            for url in rel.downloads:
+                t = urllib.parse.unquote_plus(url)
+                name = urllib.parse.quote_plus(t)
+                if Path(f"releases/{name}").exists():
+                    found += 1
+                    break
     print(f"Need to download {len(releases)-found} releases", flush=True)
     if len(releases) > found:
         print("Zipping", flush=True)
-    download_releases(releases, template, to_prg)
+    download_releases(releases, template, to_prg, fake_it)
     print("Done", flush=True)
 
 

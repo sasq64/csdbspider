@@ -310,12 +310,39 @@ def unpack_to(file: Path, target_dir: Path, to_prg: bool):
 
 
 def fake_download(url: str) -> Path | None:
+
     t = urllib.parse.unquote_plus(url)
     name = urllib.parse.quote_plus(t)
     file_name = Path(f"releases/{name}")
     print(f"Downloading {url}")
     time.sleep(0.004)
     return file_name
+
+def write_m3u(target: Path, release: Release):
+    text = "#EXTM3U\n"
+    text += "#EXTINF:-1"
+    if release.title != "":
+        text += f" title=\"{release.title}\""
+    gtext = ""
+    for group in release.groups:
+        if gtext == "":
+            gtext += group 
+        else:
+            gtext += f"/{group}" 
+    if gtext != "":
+        text += f" group=\"{gtext}\""
+    if release.year != "":
+        text += f" year=\"{release.year}\""
+    text += "\n"
+
+    files = []
+    for d in target.iterdir():
+        if d.suffix == ".d64" or d.suffix == ".prg":
+            files.append(d.name)
+    if len(files) > 0:
+        files.sort()
+        (target / "demo.m3u").write_text(text + "\n".join(files) + "\n")
+
 
 def download_releases(releases: list[Release], template: str, to_prg: bool, fake_it: bool = False):
     for release in releases:
@@ -331,6 +358,7 @@ def download_releases(releases: list[Release], template: str, to_prg: bool, fake
                     fake_download(dl)
                 if unpack_to(file, target_dir, to_prg):
                     ok = True
+                    write_m3u(target_dir, release)
                     break
         if ok:
             continue
@@ -339,6 +367,7 @@ def download_releases(releases: list[Release], template: str, to_prg: bool, fake
             if file is not None:
                 if unpack_to(file, target_dir, to_prg):
                     ok = True
+                    write_m3u(target_dir, release)
                     break
         if not ok:
             print(f"Found no valid download for {release.group} - {release.title}")

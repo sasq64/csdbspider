@@ -7,6 +7,7 @@ from typing import Generator
 import urllib.request
 import urllib.parse
 import urllib.error
+import http.client
 import re
 
 
@@ -189,9 +190,10 @@ def download(url: str) -> Path | None:
             print(f"Downloading {url}")
             data = urllib.request.urlopen(url.replace(" ", "%20")).read()
             file_name.write_bytes(data)
-        except urllib.error.HTTPError:
-            return None
-        except urllib.error.URLError:
+        except (OSError, http.client.HTTPException) as e:
+            # Covers HTTPError/URLError (OSError subclasses) as well as
+            # abrupt disconnects like RemoteDisconnected/IncompleteRead.
+            print(f"Download failed: {e}")
             return None
     return file_name
 

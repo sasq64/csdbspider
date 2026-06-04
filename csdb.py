@@ -318,6 +318,10 @@ def fake_download(url: str) -> Path | None:
     time.sleep(0.004)
     return file_name
 
+def is_basic_load(x: Path) -> bool:
+    start = int.from_bytes(x.read_bytes()[:2], byteorder='little')
+    return start <= 0x0801 and start >= 0x400
+
 def write_m3u(target: Path, release: Release):
     text = "#EXTM3U\n"
     text += "#EXTINF:-1"
@@ -331,13 +335,13 @@ def write_m3u(target: Path, release: Release):
             gtext += f"/{group}" 
     if gtext != "":
         text += f" group=\"{gtext}\""
-    if release.year != "":
+    if release.year > 0:
         text += f" year=\"{release.year}\""
     text += "\n"
 
-    files = []
+    files : list[str] = []
     for d in target.iterdir():
-        if d.suffix == ".d64" or d.suffix == ".prg":
+        if d.suffix == ".d64" or (d.suffix == ".prg" and is_basic_load(d)):
             files.append(d.name)
     if len(files) > 0:
         files.sort()

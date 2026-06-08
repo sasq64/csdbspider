@@ -341,7 +341,7 @@ def write_m3u(target: Path, release: Release):
 
     files : list[str] = []
     for d in target.iterdir():
-        if d.suffix == ".d64" or (d.suffix == ".prg" and is_basic_load(d)):
+        if d.suffix.lower() == ".d64" or (is_basic_load(d)):
             files.append(d.name)
     if len(files) > 0:
         files.sort()

@@ -19,6 +19,17 @@ from bs4 import BeautifulSoup, Tag
 from tools64 import Release, unpack, show_run_output
 from utils import download, get_cached
 
+NOFAST = [
+    "Tuomiopaeivae",
+    "Mu Mu Land",
+    "Stereo Re-Issue",
+    "Stereo",
+    "Crest Avantgarde",
+    "Portal",
+    "LM Dir Fun",
+    "Colors"
+]
+
 
 @dataclass
 class Link:
@@ -353,6 +364,9 @@ def write_m3u(target: Path, release: Release):
         text += f" group=\"{gtext}\""
     if release.year > 0:
         text += f" year=\"{release.year}\""
+    if release.title in NOFAST:
+        text += f" vice_jiffydos=\"disabled\""
+
     text += "\n"
 
     files : list[str] = []

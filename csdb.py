@@ -40,7 +40,7 @@ class Event:
     compos: list[Compo] = field(default_factory=list)
 
 
-types: dict[str, int] = {"demo": 1, "onefile": 2, "game": 3}
+types: dict[str, int] = {"demo": 1, "onefile": 2, "game": 3, "gfx": 9}
 
 
 def get_soup(url: str) -> BeautifulSoup:
@@ -298,13 +298,11 @@ def populate_release(link: Link) -> Release | None:
 
 def unpack_to(file: Path, target_dir: Path, to_prg: bool):
     udir = Path("_unpack")
-    if target_dir.is_dir():
-        for r in target_dir.iterdir():
-            r.unlink()
-        target_dir.rmdir()
     unpack(file, udir, d64_to_prg=to_prg)
-    if len(list(udir.iterdir())) > 0:
-        udir.rename(target_dir)
+    ld = list(udir.iterdir())
+    if len(ld) > 0:
+        for r in udir.iterdir():
+            r.rename(target_dir / r.name)
         return True
     return False
 
@@ -321,6 +319,24 @@ def fake_download(url: str) -> Path | None:
 def is_basic_load(x: Path) -> bool:
     start = int.from_bytes(x.read_bytes()[:2], byteorder='little')
     return start <= 0x0801 and start >= 0x400
+
+# Sort disk images so that the most "main" disk comes first. Ordering rules:
+# 1. Files whose stem ends in a digit (a digit right next to the extension dot)
+#    come first, e.g. `disk3.d64`.
+# 2. Files that contain a digit somewhere else come next, e.g. `disk2_extra.d64`.
+# 3. Files with no digit at all come last, e.g. `anything.d64`.
+def sort_disk_images(images: list[Path]) -> None:
+    def key(image: Path) -> tuple[int, int, str]:
+        name = image.name if isinstance(image, Path) else str(image)
+        stem = name.rsplit(".", 1)[0] if "." in name else name
+        m = re.search(r"(\d+)$", stem)
+        if m:
+            return (0, int(m.group(1)), name.lower())
+        if any(c.isdigit() for c in stem):
+            return (1, 0, name.lower())
+        return (2, 0, name.lower())
+
+    images.sort(key=key)
 
 def write_m3u(target: Path, release: Release):
     text = "#EXTM3U\n"
@@ -344,7 +360,7 @@ def write_m3u(target: Path, release: Release):
         if d.suffix.lower() == ".d64" or (is_basic_load(d)):
             files.append(d.name)
     if len(files) > 0:
-        files.sort()
+        sort_disk_images(files)
         (target / "demo.m3u").write_text(text + "\n".join(files) + "\n")
 
 
@@ -352,29 +368,31 @@ def download_releases(releases: list[Release], template: str, to_prg: bool, fake
     for release in releases:
         target_dir = Path(release.format(template))
         target_dir.mkdir(parents=True, exist_ok=True)
-        # print(target_dir)
         ok = False
+
+        # Empty target dir
+        if target_dir.is_dir():
+            for r in target_dir.iterdir():
+                r.unlink()
+            target_dir.rmdir()
+        target_dir.mkdir(parents=True, exist_ok=True)
 
         for dl in release.downloads:
             file = get_cached(dl)
+            if file is None:
+                file = download(dl)
             if file is not None:
                 if fake_it:
                     fake_download(dl)
                 if unpack_to(file, target_dir, to_prg):
                     ok = True
-                    write_m3u(target_dir, release)
-                    break
-        if ok:
-            continue
-        for dl in release.downloads:
-            file = download(dl)
-            if file is not None:
-                if unpack_to(file, target_dir, to_prg):
-                    ok = True
-                    write_m3u(target_dir, release)
+                    if file.suffix.lower() == ".d64" and file.stem[-1].isdigit():
+                        continue
                     break
         if not ok:
             print(f"Found no valid download for {release.group} - {release.title}")
+        else:
+            write_m3u(target_dir, release)
 
 
 def unpack_precache():
@@ -474,7 +492,7 @@ def main():
     arg_parser.add_argument(
         "-l",
         "--top-list",
-        choices=["demo", "onefile", "game"],
+        choices=["demo", "onefile", "game", "gfx"],
         help="Download top list releases from given type.",
     )
     arg_parser.add_argument(

@@ -176,6 +176,9 @@ def unpack(
 
     while True:
         file_name = get_filename(archive)
+        if ext == ".D64":
+            shutil.copyfile(archive, targetdir / file_name)
+            break
         if ext == ".GZ":
             # Gzip replaces original file so copy it to targetdir first
             shutil.copyfile(archive, targetdir / file_name)
@@ -218,6 +221,10 @@ def unpack(
 
     # Convert some isoteric formats
     for r in targetdir.iterdir():
+        name = r.name
+        if name.startswith(".") or name.startswith("_"):
+            r.unlink()
+            continue
         ext = r.suffix.upper()
         if r.is_dir():
             continue
